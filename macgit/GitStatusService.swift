@@ -45,6 +45,43 @@ struct StatusFile: Identifiable, Equatable, Hashable {
         let url = URL(fileURLWithPath: path)
         return url.deletingLastPathComponent().path
     }
+
+    var fileExtension: String {
+        URL(fileURLWithPath: path).pathExtension.lowercased()
+    }
+
+    var isImage: Bool {
+        ["png", "jpg", "jpeg", "gif", "svg", "webp", "bmp", "tiff", "tif", "ico", "heic", "heif", "raw", "cr2", "nef", "arw", "dng"].contains(fileExtension)
+    }
+
+    var isBinary: Bool {
+        let binaryExtensions = [
+            // Archives
+            "zip", "tar", "gz", "bz2", "7z", "rar", "xz", "lz4", "zst",
+            // Documents
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf",
+            // Executables / Packages
+            "exe", "dll", "dmg", "pkg", "deb", "rpm", "apk", "ipa", "app", "msi",
+            "so", "dylib", "a", "o", "class", "jar", "war", "ear",
+            // Disk / ISO
+            "iso", "img", "vmdk", "vhd",
+            // Databases
+            "db", "sqlite", "sqlite3", "mdb", "accdb",
+            // Ebooks
+            "mobi", "epub", "azw", "azw3",
+            // Adobe / Design
+            "psd", "ai", "indd", "sketch", "fig", "xd",
+            // Audio
+            "mp3", "aac", "ogg", "flac", "wav", "m4a", "wma", "aiff",
+            // Video
+            "mp4", "avi", "mov", "mkv", "flv", "wmv", "webm", "m4v", "mpg", "mpeg", "3gp",
+            // Fonts
+            "otf", "ttf", "woff", "woff2", "eot",
+            // Other binary
+            "bin", "dat", "cache", "pdb", "mo", "po", "nib", "strings"
+        ]
+        return binaryExtensions.contains(fileExtension)
+    }
 }
 
 struct GitStatus {
@@ -158,6 +195,12 @@ actor GitStatusService {
                     originalPath = String(components[0])
                     path = String(components[1])
                 }
+            }
+
+            // Skip non-previewable binary files (but keep images)
+            let tempFile = StatusFile(path: path, status: .modified, originalPath: originalPath)
+            if tempFile.isBinary && !tempFile.isImage {
+                continue
             }
 
             let indexChar = Character(String(indexStatus))

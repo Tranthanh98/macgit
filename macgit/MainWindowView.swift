@@ -307,13 +307,40 @@ struct FileStatusView: View {
 
                     Divider()
 
-                    DiffView(hunks: diffHunks)
+                    if file.isImage {
+                        imagePreview(file: file)
+                    } else {
+                        DiffView(hunks: diffHunks)
+                    }
                 }
             } else {
                 EmptyStateView(
                     icon: "doc.text",
                     message: "Select a file",
                     detail: "Click a file on the left to see its diff"
+                )
+            }
+        }
+    }
+
+    private func imagePreview(file: StatusFile) -> some View {
+        let fileURL = repositoryURL.appendingPathComponent(file.path)
+        return Group {
+            if let nsImage = NSImage(contentsOf: fileURL) {
+                GeometryReader { geo in
+                    ScrollView([.horizontal, .vertical]) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: max(geo.size.width, CGFloat(nsImage.size.width)),
+                                   maxHeight: max(geo.size.height, CGFloat(nsImage.size.height)))
+                    }
+                }
+            } else {
+                EmptyStateView(
+                    icon: "photo",
+                    message: "Unable to preview image",
+                    detail: file.path
                 )
             }
         }
