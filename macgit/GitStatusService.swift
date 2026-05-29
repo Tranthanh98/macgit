@@ -1,0 +1,351 @@
+//
+//  GitStatusService.swift
+//  macgit
+//
+
+import Foundation
+
+enum FileStatus: String, CaseIterable {
+    case modified
+    case staged
+    case untracked
+    case deleted
+    case renamed
+    case added
+
+    var displayColor: String {
+        switch self {
+        case .staged, .added:
+            return "green"
+        case .modified, .deleted:
+            return "red"
+        case .untracked:
+            return "grey"
+        case .renamed:
+            return "green"
+        }
+    }
+}
+
+struct StatusFile: Identifiable, Equatable, Hashable {
+    let id = UUID()
+    let path: String
+    let status: FileStatus
+    let originalPath: String?
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+
+    var displayName: String {
+        URL(fileURLWithPath: path).lastPathComponent
+    }
+
+    var directory: String {
+        let url = URL(fileURLWithPath: path)
+        return url.deletingLastPathComponent().path
+    }
+}
+
+struct GitStatus {
+    let staged: [StatusFile]
+    let unstaged: [StatusFile]
+    let untracked: [StatusFile]
+
+    var isEmpty: Bool {
+        staged.isEmpty && unstaged.isEmpty && untracked.isEmpty
+    }
+}
+
+enum GitError: LocalizedError {
+    case notARepository
+    case gitNotFound
+    case commandFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notARepository:
+            return "The selected folder is not a Git repository."
+        case .gitNotFound:
+            return "Git command not found. Please install Git."
+        case .commandFailed(let message):
+            return message
+        }
+    }
+}
+
+actor GitStatusService {
+    static let shared = GitStatusService()
+
+    private init() {}
+
+    private func gitExecutable() -> String {
+        // Prefer system git, fallback to /usr/bin/git
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        task.arguments = ["git"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        do {
+            try task.run()
+            task.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !path.isEmpty {
+                return path
+            }
+        } catch {
+            // fallthrough
+        }
+        return "/usr/bin/git"
+    }
+
+    private func runGit(arguments: [String], in directory: URL) async throws -> String {
+        let executable = gitExecutable()
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: executable)
+        task.arguments = arguments
+        task.currentDirectoryURL = directory
+        task.environment = ProcessInfo.processInfo.environment
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        task.standardOutput = stdout
+        task.standardError = stderr
+
+        return try await withCheckedThrowingContinuation { continuation in
+            task.terminationHandler = { process in
+                let outData = stdout.fileHandleForReading.readDataToEndOfFile()
+                let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: outData, encoding: .utf8) ?? ""
+                let errorOutput = String(data: errData, encoding: .utf8) ?? ""
+
+                if process.terminationStatus != 0 {
+                    let message = errorOutput.isEmpty ? output : errorOutput
+                    continuation.resume(throwing: GitError.commandFailed(message.trimmingCharacters(in: .whitespacesAndNewlines)))
+                } else {
+                    continuation.resume(returning: output)
+                }
+            }
+
+            do {
+                try task.run()
+            } catch {
+                continuation.resume(throwing: GitError.gitNotFound)
+            }
+        }
+    }
+
+    func status(for repositoryURL: URL) async throws -> GitStatus {
+        let output = try await runGit(arguments: ["status", "--porcelain", "--untracked-files=all"], in: repositoryURL)
+        var staged: [StatusFile] = []
+        var unstaged: [StatusFile] = []
+        var untracked: [StatusFile] = []
+
+        for line in output.split(separator: "\n") {
+            let line = String(line)
+            guard line.count >= 3 else { continue }
+            let indexStatus = line.prefix(1)
+            let worktreeStatus = line.dropFirst(1).prefix(1)
+            let pathPart = String(line.dropFirst(3))
+
+            // Parse renamed paths (R  old -> new)
+            var path = pathPart
+            var originalPath: String? = nil
+            if indexStatus == "R" || worktreeStatus == "R" {
+                let components = pathPart.split(separator: " -> ", maxSplits: 1)
+                if components.count == 2 {
+                    originalPath = String(components[0])
+                    path = String(components[1])
+                }
+            }
+
+            let indexChar = Character(String(indexStatus))
+            let worktreeChar = Character(String(worktreeStatus))
+
+            // Index status -> staged
+            switch indexChar {
+            case "M", "A", "D", "R", "C":
+                let status: FileStatus = (indexChar == "A") ? .added :
+                                         (indexChar == "D") ? .deleted :
+                                         (indexChar == "R") ? .renamed :
+                                         (indexChar == "C") ? .added : .staged
+                staged.append(StatusFile(path: path, status: status, originalPath: originalPath))
+            default:
+                break
+            }
+
+            // Worktree status -> unstaged or untracked
+            switch worktreeChar {
+            case "M", "D":
+                let status: FileStatus = (worktreeChar == "D") ? .deleted : .modified
+                unstaged.append(StatusFile(path: path, status: status, originalPath: originalPath))
+            case "?":
+                untracked.append(StatusFile(path: path, status: .untracked, originalPath: nil))
+            default:
+                break
+            }
+        }
+
+        return GitStatus(staged: staged, unstaged: unstaged, untracked: untracked)
+    }
+
+    func stage(file: StatusFile, in repositoryURL: URL) async throws {
+        _ = try await runGit(arguments: ["add", file.path], in: repositoryURL)
+    }
+
+    func unstage(file: StatusFile, in repositoryURL: URL) async throws {
+        _ = try await runGit(arguments: ["reset", "HEAD", "--", file.path], in: repositoryURL)
+    }
+
+    func discard(file: StatusFile, in repositoryURL: URL) async throws {
+        if file.status == .untracked {
+            // Remove untracked file from filesystem
+            let fileURL = repositoryURL.appendingPathComponent(file.path)
+            try FileManager.default.removeItem(at: fileURL)
+        } else {
+            _ = try await runGit(arguments: ["checkout", "--", file.path], in: repositoryURL)
+        }
+    }
+
+    func commit(message: String, in repositoryURL: URL) async throws {
+        _ = try await runGit(arguments: ["commit", "-m", message], in: repositoryURL)
+    }
+
+    func diff(for file: StatusFile, in repositoryURL: URL) async throws -> [DiffHunk] {
+        // Untracked file → read directly and show all lines as added (green)
+        if file.status == .untracked {
+            let fileURL = repositoryURL.appendingPathComponent(file.path)
+            guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+            let content = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
+            let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
+            let diffLines = lines.enumerated().map { index, line in
+                DiffLine(oldLineNumber: nil, newLineNumber: index + 1, text: String(line), type: .added)
+            }
+            return [DiffHunk(header: "@@ -0,0 +1,\(lines.count) @@", lines: diffLines)]
+        }
+
+        // Deleted file → get old content from HEAD and show all lines as removed (red)
+        if file.status == .deleted {
+            let output = try await runGit(arguments: ["show", "HEAD:\(file.path)"], in: repositoryURL)
+            let lines = output.split(separator: "\n", omittingEmptySubsequences: false)
+            let diffLines = lines.enumerated().map { index, line in
+                DiffLine(oldLineNumber: index + 1, newLineNumber: nil, text: String(line), type: .removed)
+            }
+            return [DiffHunk(header: "@@ -1,\(lines.count) +0,0 @@", lines: diffLines)]
+        }
+
+        // Normal diff for modified/renamed/staged files
+        let isStaged = file.status == .staged || file.status == .added || file.status == .renamed
+        var arguments = ["diff", "--no-color", "-U3"]
+        if isStaged {
+            arguments.append("--cached")
+        }
+        arguments.append("--")
+        arguments.append(file.path)
+
+        let output = try await runGit(arguments: arguments, in: repositoryURL)
+        return DiffParser.parse(output)
+    }
+}
+
+// MARK: - Diff Parser
+
+enum DiffLineType {
+    case context
+    case added
+    case removed
+    case header
+}
+
+struct DiffLine: Identifiable {
+    let id = UUID()
+    let oldLineNumber: Int?
+    let newLineNumber: Int?
+    let text: String
+    let type: DiffLineType
+}
+
+struct DiffHunk: Identifiable {
+    let id = UUID()
+    let header: String
+    let lines: [DiffLine]
+}
+
+enum DiffParser {
+    static func parse(_ raw: String) -> [DiffHunk] {
+        var hunks: [DiffHunk] = []
+        var currentLines: [DiffLine] = []
+        var currentHeader = ""
+        var oldLine = 0
+        var newLine = 0
+
+        let lines = raw.split(separator: "\n", omittingEmptySubsequences: false)
+        var inHunk = false
+
+        for line in lines {
+            let text = String(line)
+
+            if text.hasPrefix("@@") {
+                // Start of hunk
+                if inHunk {
+                    hunks.append(DiffHunk(header: currentHeader, lines: currentLines))
+                }
+                inHunk = true
+                currentHeader = text
+                currentLines = []
+
+                // Parse line numbers: @@ -start,count +start,count @@
+                if let range = text.range(of: "@@ -"),
+                   let atRange = text[range.upperBound...].range(of: " @@") {
+                    let numbersPart = String(text[range.upperBound..<atRange.lowerBound])
+                    let parts = numbersPart.split(separator: " ")
+                    if parts.count == 2 {
+                        let oldPart = parts[0].split(separator: ",")
+                        let newPart = parts[1].split(separator: ",")
+                        oldLine = Int(oldPart[0]) ?? 0
+                        if oldPart.count > 1, let count = Int(oldPart[1]), count == 0 {
+                            // Deleted file or new file
+                        }
+                        newLine = Int(String(newPart[0]).dropFirst()) ?? 0
+                    }
+                }
+                continue
+            }
+
+            if !inHunk {
+                continue
+            }
+
+            guard !text.isEmpty else {
+                currentLines.append(DiffLine(oldLineNumber: nil, newLineNumber: nil, text: "", type: .context))
+                continue
+            }
+
+            let prefix = text.prefix(1)
+            switch prefix {
+            case "+":
+                currentLines.append(DiffLine(oldLineNumber: nil, newLineNumber: newLine, text: String(text.dropFirst()), type: .added))
+                newLine += 1
+            case "-":
+                currentLines.append(DiffLine(oldLineNumber: oldLine, newLineNumber: nil, text: String(text.dropFirst()), type: .removed))
+                oldLine += 1
+            case " ":
+                currentLines.append(DiffLine(oldLineNumber: oldLine, newLineNumber: newLine, text: String(text.dropFirst()), type: .context))
+                oldLine += 1
+                newLine += 1
+            case "\\":
+                // "\ No newline at end of file"
+                currentLines.append(DiffLine(oldLineNumber: nil, newLineNumber: nil, text: text, type: .header))
+            default:
+                break
+            }
+        }
+
+        if inHunk && !currentLines.isEmpty {
+            hunks.append(DiffHunk(header: currentHeader, lines: currentLines))
+        }
+
+        return hunks
+    }
+}
