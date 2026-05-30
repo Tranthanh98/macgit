@@ -433,6 +433,8 @@ struct FileStatusView: View {
             return "arrow.right.circle.fill"
         case .untracked:
             return "questionmark.circle.fill"
+        case .conflict:
+            return "exclamationmark.triangle.fill"
         }
     }
 
@@ -448,6 +450,8 @@ struct FileStatusView: View {
             return .blue
         case .untracked:
             return .gray
+        case .conflict:
+            return .purple
         }
     }
 

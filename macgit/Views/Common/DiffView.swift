@@ -58,8 +58,12 @@ struct HunkView: View {
         file?.status == .untracked
     }
 
+    private var isConflict: Bool {
+        file?.status == .conflict
+    }
+
     private var canInteract: Bool {
-        !isUntracked && file != nil && repositoryURL != nil
+        !isUntracked && !isConflict && file != nil && repositoryURL != nil
     }
 
     private var hasSelectedLines: Bool {
@@ -289,7 +293,7 @@ struct HunkView: View {
             switch line.type {
             case .added, .removed:
                 currentBlock.insert(line.id)
-            case .context, .header:
+            case .context, .header, .conflictMarker:
                 if !currentBlock.isEmpty {
                     blocks.append(currentBlock)
                     currentBlock = []
@@ -344,6 +348,8 @@ struct DiffLineView: View {
             return Color.clear
         case .header:
             return Color.clear
+        case .conflictMarker:
+            return Color.purple.opacity(0.10)
         }
     }
 
@@ -357,6 +363,8 @@ struct DiffLineView: View {
             return .primary
         case .header:
             return .secondary
+        case .conflictMarker:
+            return Color.purple
         }
     }
 
@@ -366,6 +374,7 @@ struct DiffLineView: View {
         case .removed: return "−"
         case .context: return " "
         case .header: return ""
+        case .conflictMarker: return "!"
         }
     }
 

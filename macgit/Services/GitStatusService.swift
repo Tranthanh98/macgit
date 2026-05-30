@@ -12,6 +12,7 @@ enum FileStatus: String, CaseIterable {
     case deleted
     case renamed
     case added
+    case conflict
 
     var displayColor: String {
         switch self {
@@ -23,6 +24,8 @@ enum FileStatus: String, CaseIterable {
             return "grey"
         case .renamed:
             return "green"
+        case .conflict:
+            return "red"
         }
     }
 }
@@ -205,6 +208,21 @@ actor GitStatusService {
 
             let indexChar = Character(String(indexStatus))
             let worktreeChar = Character(String(worktreeStatus))
+
+            // Detect merge conflicts
+            let isConflict = indexStatus == "U" || worktreeStatus == "U" ||
+                             (indexStatus == "A" && worktreeStatus == "A") ||
+                             (indexStatus == "D" && worktreeStatus == "D")
+
+            if isConflict {
+                if indexStatus != " " && indexStatus != "." {
+                    staged.append(StatusFile(path: path, status: .conflict, originalPath: originalPath))
+                }
+                if worktreeStatus != " " && worktreeStatus != "." && worktreeStatus != "?" {
+                    unstaged.append(StatusFile(path: path, status: .conflict, originalPath: originalPath))
+                }
+                continue
+            }
 
             // Index status -> staged
             switch indexChar {
@@ -424,6 +442,7 @@ actor GitStatusService {
             case .removed: return "-\(line.text)"
             case .context: return " \(line.text)"
             case .header: return line.text
+            case .conflictMarker: return " \(line.text)"
             }
         }.joined(separator: "\n")
         return "--- a/\(filePath)\n+++ b/\(filePath)\n\(hunk.header)\n\(linesStr)\n"
@@ -454,6 +473,10 @@ actor GitStatusService {
                 }
             case .header:
                 filteredLines.append(line.text)
+            case .conflictMarker:
+                filteredLines.append(" \(line.text)")
+                oldCount += 1
+                newCount += 1
             }
         }
 
@@ -479,6 +502,7 @@ enum DiffLineType {
     case added
     case removed
     case header
+    case conflictMarker
 }
 
 struct DiffLine: Identifiable {
@@ -546,15 +570,30 @@ enum DiffParser {
             }
 
             let prefix = text.prefix(1)
+            let content = String(text.dropFirst())
+            let isConflictMarker = content.hasPrefix("<<<<<<<") || content.hasPrefix("=======") || content.hasPrefix(">>>>>>>")
+
             switch prefix {
             case "+":
-                currentLines.append(DiffLine(oldLineNumber: nil, newLineNumber: newLine, text: String(text.dropFirst()), type: .added))
+                if isConflictMarker {
+                    currentLines.append(DiffLine(oldLineNumber: nil, newLineNumber: newLine, text: content, type: .conflictMarker))
+                } else {
+                    currentLines.append(DiffLine(oldLineNumber: nil, newLineNumber: newLine, text: content, type: .added))
+                }
                 newLine += 1
             case "-":
-                currentLines.append(DiffLine(oldLineNumber: oldLine, newLineNumber: nil, text: String(text.dropFirst()), type: .removed))
+                if isConflictMarker {
+                    currentLines.append(DiffLine(oldLineNumber: oldLine, newLineNumber: nil, text: content, type: .conflictMarker))
+                } else {
+                    currentLines.append(DiffLine(oldLineNumber: oldLine, newLineNumber: nil, text: content, type: .removed))
+                }
                 oldLine += 1
             case " ":
-                currentLines.append(DiffLine(oldLineNumber: oldLine, newLineNumber: newLine, text: String(text.dropFirst()), type: .context))
+                if isConflictMarker {
+                    currentLines.append(DiffLine(oldLineNumber: oldLine, newLineNumber: newLine, text: content, type: .conflictMarker))
+                } else {
+                    currentLines.append(DiffLine(oldLineNumber: oldLine, newLineNumber: newLine, text: content, type: .context))
+                }
                 oldLine += 1
                 newLine += 1
             case "\\":
