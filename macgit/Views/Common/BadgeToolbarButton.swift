@@ -32,7 +32,7 @@ struct BadgeToolbarButton: View {
                         .foregroundColor(.white)
                         .padding(.horizontal, 3)
                         .padding(.vertical, 1)
-                        .background(Color.red)
+                        .background(Color.accentColor)
                         .clipShape(Capsule())
                         .overlay(
                             Capsule()

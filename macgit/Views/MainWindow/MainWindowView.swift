@@ -22,6 +22,7 @@ struct MainWindowView: View {
     @State private var showingFetchSheet = false
     @State private var showingBranchSheet = false
     @StateObject private var syncState = SyncState()
+    @State private var repoIconName: String = "code-branch"
 
     var body: some View {
         NavigationSplitView {
@@ -56,7 +57,7 @@ struct MainWindowView: View {
 
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 6) {
-                    Image("code-branch")
+                    Image(repoIconName)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 18, height: 18)
@@ -84,6 +85,10 @@ struct MainWindowView: View {
         .task {
             await syncState.refresh(repositoryURL: repositoryURL)
             syncState.startBackgroundSync(repositoryURL: repositoryURL)
+            let remoteURLString = await GitStatusService.shared.remoteURL(remote: "origin", in: repositoryURL)
+            if !remoteURLString.isEmpty {
+                repoIconName = determineRepoIconName(from: remoteURLString)
+            }
         }
         .onDisappear {
             syncState.stopBackgroundSync()

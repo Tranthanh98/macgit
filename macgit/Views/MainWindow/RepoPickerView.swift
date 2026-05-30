@@ -7,11 +7,25 @@
 
 import SwiftUI
 
+func determineRepoIconName(from remoteURLString: String) -> String {
+    let lower = remoteURLString.lowercased()
+    if lower.contains("github.com") || lower.contains("github") {
+        return "github"
+    } else if lower.contains("gitlab.com") || lower.contains("gitlab") {
+        return "gitlab"
+    } else if lower.contains("bitbucket.org") || lower.contains("bitbucket") {
+        return "bitbucket"
+    } else {
+        return "code-branch"
+    }
+}
+
 struct RepoPickerView: View {
     @ObservedObject private var store = RecentRepositoriesStore.shared
     @State private var showingCloneSheet = false
     @State private var errorMessage: String?
     @State private var showingError = false
+    @State private var repoIcons: [URL: String] = [:]
 
     var showCloneSheetInitially: Bool
     var onRepositoryOpened: (URL) -> Void
@@ -74,8 +88,10 @@ struct RepoPickerView: View {
                                 onRepositoryOpened(repo.url)
                             }) {
                                 HStack {
-                                    Image(systemName: "folder.fill")
-                                        .foregroundStyle(Color.accentColor)
+                                    Image(repoIcons[repo.url] ?? "code-branch")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: 18, height: 18)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(repo.name)
                                             .font(.body)
@@ -92,6 +108,14 @@ struct RepoPickerView: View {
                                 .padding(.vertical, 4)
                             }
                             .buttonStyle(.plain)
+                            .task(id: repo.url) {
+                                let remoteURLString = await GitStatusService.shared.remoteURL(remote: "origin", in: repo.url)
+                                if !remoteURLString.isEmpty {
+                                    repoIcons[repo.url] = determineRepoIconName(from: remoteURLString)
+                                } else {
+                                    repoIcons[repo.url] = "code-branch"
+                                }
+                            }
                         }
                         .onDelete(perform: store.remove(at:))
                     }
@@ -177,6 +201,7 @@ struct CloneSheetView: View {
     @State private var showingDestinationPicker = false
     @State private var errorMessage: String?
     @State private var showingError = false
+    @State private var repoIconName: String = "code-branch"
 
     var onClone: (URL) -> Void
 
@@ -189,9 +214,18 @@ struct CloneSheetView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Remote URL")
                     .font(.headline)
-                TextField("https://github.com/user/repo.git", text: $remoteURL)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 400)
+                HStack(spacing: 6) {
+                    Image(repoIconName)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 18, height: 18)
+                    TextField("https://github.com/user/repo.git", text: $remoteURL)
+                        .textFieldStyle(.roundedBorder)
+                }
+                .frame(width: 400)
+                .onChange(of: remoteURL) { _, newValue in
+                    repoIconName = determineRepoIconName(from: newValue)
+                }
             }
 
             VStack(alignment: .leading, spacing: 8) {
