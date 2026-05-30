@@ -361,6 +361,24 @@ actor GitStatusService {
         return try await runGit(arguments: arguments, in: repositoryURL)
     }
 
+    struct MergeOptions {
+        var noFastForward: Bool = false
+        var squash: Bool = false
+        var message: String = ""
+    }
+
+    func merge(branch: String, options: MergeOptions, in repositoryURL: URL) async throws -> String {
+        var arguments = ["merge"]
+        if options.noFastForward { arguments.append("--no-ff") }
+        if options.squash { arguments.append("--squash") }
+        if !options.squash && !options.message.isEmpty {
+            arguments.append("-m")
+            arguments.append(options.message)
+        }
+        arguments.append(branch)
+        return try await runGit(arguments: arguments, in: repositoryURL)
+    }
+
     struct FetchOptions {
         var fetchAllRemotes: Bool = true
         var prune: Bool = false

@@ -21,9 +21,10 @@ class SyncState: ObservableObject {
     @Published var isPushing: Bool = false
     @Published var isPulling: Bool = false
     @Published var isFetching: Bool = false
+    @Published var isMerging: Bool = false
 
     var isAnySyncing: Bool {
-        isCommitting || isPushing || isPulling || isFetching
+        isCommitting || isPushing || isPulling || isFetching || isMerging
     }
 
     private var backgroundTask: Task<Void, Never>? = nil
@@ -148,6 +149,31 @@ class SyncState: ObservableObject {
             await refresh(repositoryURL: repositoryURL)
         } catch {
             showError(error.localizedDescription)
+        }
+    }
+
+    func performMerge(branch: String, options: GitStatusService.MergeOptions, repositoryURL: URL) async {
+        if await checkConflicts(repositoryURL: repositoryURL) { return }
+        await MainActor.run { isMerging = true }
+        defer { Task { @MainActor in isMerging = false } }
+        do {
+            let output = try await GitStatusService.shared.merge(branch: branch, options: options, in: repositoryURL)
+            await refresh(repositoryURL: repositoryURL)
+            let trimmed = output.lowercased()
+            if options.squash {
+                showInfo("Squash merge completed. Changes are staged.")
+            } else if trimmed.contains("already up to date") || trimmed.contains("already up-to-date") {
+                showInfo("Already up to date.")
+            } else {
+                showInfo("Merge completed successfully.")
+            }
+        } catch {
+            let message = error.localizedDescription
+            if message.uppercased().contains("CONFLICT") {
+                showConflict("Merge conflicts occurred during Merge. Please resolve them in the File status view.")
+            } else {
+                showError(message)
+            }
         }
     }
 }

@@ -21,6 +21,7 @@ struct MainWindowView: View {
     @State private var showingPushSheet = false
     @State private var showingFetchSheet = false
     @State private var showingBranchSheet = false
+    @State private var showingMergeSheet = false
     @StateObject private var syncState = SyncState()
     @State private var repoIconName: String = "code-branch"
 
@@ -153,6 +154,13 @@ struct MainWindowView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingMergeSheet) {
+            MergeSheetView(repositoryURL: repositoryURL) { branch, message, options in
+                Task {
+                    await syncState.performMerge(branch: branch, options: options, repositoryURL: repositoryURL)
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -165,7 +173,7 @@ struct MainWindowView: View {
                 BadgeToolbarButton(icon: "arrow.up.to.line", label: "Push", badgeCount: syncState.pushBadgeCount, isLoading: syncState.isPushing, disabled: syncing, action: { showingPushSheet = true })
                 toolbarButton(icon: "arrow.down.circle", label: "Fetch", isLoading: syncState.isFetching, disabled: syncing, action: { showingFetchSheet = true })
                 toolbarButton(icon: "arrow.triangle.branch", label: "Branch", action: { showingBranchSheet = true })
-                toolbarButton(icon: "arrow.triangle.merge", label: "Merge", action: {})
+                toolbarButton(icon: "arrow.triangle.merge", label: "Merge", isLoading: syncState.isMerging, disabled: syncing, action: { showingMergeSheet = true })
                 toolbarButton(icon: "archivebox", label: "Stash", action: {})
             }
         } else if windowWidth > 800 {
@@ -197,7 +205,8 @@ struct MainWindowView: View {
             }
             if windowWidth <= 1000 {
                 Button("Branch") { showingBranchSheet = true }
-                Button("Merge", action: {})
+                Button("Merge") { showingMergeSheet = true }
+                    .disabled(syncing)
                 Button("Stash", action: {})
             }
         } label: {

@@ -4,50 +4,26 @@
 TBD - created by archiving change add-git-sync-buttons. Update Purpose after archive.
 ## Requirements
 ### Requirement: Remote Synchronization Operations
-The system SHALL support Push, Pull, and Fetch operations against the remote repository via Git CLI, and provide ahead/behind commit counts for the current branch.
+The system SHALL support Push, Pull, Fetch, and Merge operations against the repository via Git CLI, and provide ahead/behind commit counts for the current branch.
 
-#### Scenario: Push sends local commits to remote
-- **WHEN** the user triggers Push
-- **THEN** the system executes `git push` in the open repository
-- **AND** upon success the File status view and badge counts refresh
-
-#### Scenario: Pull merges remote commits into local branch
-- **WHEN** the user triggers Pull
-- **THEN** the system executes `git pull` in the open repository
-- **AND** upon success the File status view and badge counts refresh
-
-#### Scenario: Fetch updates remote-tracking branches
-- **WHEN** the user triggers Fetch
-- **THEN** the system executes `git fetch` in the open repository
-- **AND** upon success the Pull and Push badge counts are immediately refreshed
-
-#### Scenario: Ahead count for Push badge
-- **WHEN** the system calculates ahead/behind counts
-- **THEN** it runs `git rev-list --count @{upstream}..HEAD` to determine how many local commits are ahead of the upstream
-
-#### Scenario: Behind count for Pull badge
-- **WHEN** the system calculates ahead/behind counts
-- **THEN** it runs `git rev-list --count HEAD..@{upstream}` to determine how many upstream commits are behind the local branch
+#### Scenario: Merge badge not shown
+- **WHEN** the system displays toolbar buttons
+- **THEN** the Merge button does not display a numeric badge
 
 ### Requirement: Conflict Detection and Popup Notice
-The system SHALL detect merge conflicts in the working directory before executing Push, Pull, or Commit, and display a popup notice. It SHALL also detect conflicts that arise during a Pull operation.
+The system SHALL detect merge conflicts in the working directory before executing Push, Pull, Commit, or Merge, and display a popup notice. It SHALL also detect conflicts that arise during a Pull or Merge operation.
 
-#### Scenario: Existing conflicts block Push and Pull
-- **WHEN** the user clicks Push or Pull
+#### Scenario: Existing conflicts block Merge
+- **WHEN** the user clicks the Merge toolbar button
 - **AND** the working directory contains files with a conflict status
 - **THEN** a native alert popup warns the user that conflicts must be resolved first
-- **AND** the Git command is not executed
+- **AND** the Merge sheet does not open
 
-#### Scenario: Conflicts arising during Pull
-- **WHEN** the user triggers Pull
+#### Scenario: Conflicts arising during Merge
+- **WHEN** the user triggers Merge
 - **AND** the merge results in conflicts
-- **THEN** a native alert popup notifies the user that merge conflicts occurred during Pull
+- **THEN** a native alert popup notifies the user that merge conflicts occurred during Merge
 - **AND** the File status view refreshes to show the new conflicted files
-
-#### Scenario: Existing conflicts shown before Commit
-- **WHEN** the user opens the Commit sheet from the toolbar
-- **AND** the working directory contains conflicted files
-- **THEN** a native alert popup warns the user about unresolved conflicts
 
 ### Requirement: Pull Modal Dialog
 The system SHALL display a modal dialog when the user clicks the Pull toolbar button, allowing selection of remote repository, remote branch, and pull options before executing the command.
@@ -129,4 +105,38 @@ The system SHALL display a modal dialog when the user clicks the Push toolbar bu
 #### Scenario: Cancel Push dialog
 - **WHEN** the user clicks Cancel in the Push dialog
 - **THEN** the dialog closes and no Git command is executed
+
+### Requirement: Branch Merge Operation
+The system SHALL support merging a selected source branch into the current branch via Git CLI, and display success or conflict notifications upon completion.
+
+#### Scenario: Fast-forward merge succeeds
+- **WHEN** the user triggers Merge with a source branch that is ahead of the current branch
+- **AND** fast-forward is possible
+- **THEN** the system executes `git merge <branch>`
+- **AND** upon success a native alert popup appears with the message "Merge completed successfully."
+- **AND** the File status view and badge counts refresh
+
+#### Scenario: No-fast-forward merge creates merge commit
+- **WHEN** the user triggers Merge with "No fast-forward" enabled
+- **THEN** the system executes `git merge --no-ff <branch>`
+- **AND** upon success a native alert popup appears with the message "Merge completed successfully."
+- **AND** the File status view and badge counts refresh
+
+#### Scenario: Squash merge stages changes
+- **WHEN** the user triggers Merge with "Squash" enabled
+- **THEN** the system executes `git merge --squash <branch>`
+- **AND** the changes are staged in the working directory for a subsequent commit
+- **AND** a native alert popup appears with the message "Squash merge completed. Changes are staged."
+- **AND** the File status view and badge counts refresh
+
+#### Scenario: Merge with no changes
+- **WHEN** the Merge command completes successfully
+- **AND** there were no new changes to merge
+- **THEN** a native alert popup appears with the message "Already up to date."
+
+#### Scenario: Merge resulting in conflicts
+- **WHEN** the user triggers Merge
+- **AND** the merge results in conflicts
+- **THEN** a native alert popup notifies the user that merge conflicts occurred during Merge
+- **AND** the File status view refreshes to show the new conflicted files
 
