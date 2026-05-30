@@ -17,6 +17,7 @@ struct MainWindowView: View {
     @State private var selectedItem: SidebarItem? = .fileStatus
     @State private var windowWidth: CGFloat = 0
     @State private var showingCommitSheet = false
+    @StateObject private var syncState = SyncState()
 
     var body: some View {
         NavigationSplitView {
@@ -26,7 +27,7 @@ struct MainWindowView: View {
             Group {
                 switch selectedItem {
                 case .fileStatus:
-                    FileStatusView(repositoryURL: repositoryURL)
+                    FileStatusView(repositoryURL: repositoryURL, syncState: syncState)
                 case .history:
                     HistoryView(repositoryURL: repositoryURL)
                 case .search:
@@ -76,6 +77,23 @@ struct MainWindowView: View {
         }
         .navigationTitle("")
         .frame(minWidth: 900, minHeight: 600)
+        .task {
+            await syncState.refresh(repositoryURL: repositoryURL)
+            syncState.startBackgroundSync(repositoryURL: repositoryURL)
+        }
+        .onDisappear {
+            syncState.stopBackgroundSync()
+        }
+        .alert("Error", isPresented: $syncState.showingError, actions: {
+            Button("OK", role: .cancel) {}
+        }, message: {
+            Text(syncState.errorMessage ?? "An unknown error occurred")
+        })
+        .alert("Conflict", isPresented: $syncState.showingConflict, actions: {
+            Button("OK", role: .cancel) {}
+        }, message: {
+            Text(syncState.conflictMessage ?? "Merge conflicts detected.")
+        })
         .sheet(isPresented: $showingCommitSheet) {
             CommitSheetView { message in
                 Task {
@@ -89,25 +107,25 @@ struct MainWindowView: View {
     private var leftToolbar: some View {
         if windowWidth > 1000 {
             HStack(spacing: 2) {
-                toolbarButton(icon: "checkmark", label: "Commit", action: { showingCommitSheet = true })
-                toolbarButton(icon: "arrow.down.to.line", label: "Pull", action: {})
-                toolbarButton(icon: "arrow.up.to.line", label: "Push", action: {})
-                toolbarButton(icon: "arrow.down.circle", label: "Fetch", action: {})
+                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, action: { showCommitSheetIfNoConflicts() })
+                BadgeToolbarButton(icon: "arrow.down.to.line", label: "Pull", badgeCount: syncState.pullBadgeCount, action: { performPull() })
+                BadgeToolbarButton(icon: "arrow.up.to.line", label: "Push", badgeCount: syncState.pushBadgeCount, action: { performPush() })
+                toolbarButton(icon: "arrow.down.circle", label: "Fetch", action: { performFetch() })
                 toolbarButton(icon: "arrow.triangle.branch", label: "Branch", action: {})
                 toolbarButton(icon: "arrow.triangle.merge", label: "Merge", action: {})
                 toolbarButton(icon: "archivebox", label: "Stash", action: {})
             }
         } else if windowWidth > 800 {
             HStack(spacing: 2) {
-                toolbarButton(icon: "checkmark", label: "Commit", action: { showingCommitSheet = true })
-                toolbarButton(icon: "arrow.down.to.line", label: "Pull", action: {})
-                toolbarButton(icon: "arrow.up.to.line", label: "Push", action: {})
-                toolbarButton(icon: "arrow.down.circle", label: "Fetch", action: {})
+                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, action: { showCommitSheetIfNoConflicts() })
+                BadgeToolbarButton(icon: "arrow.down.to.line", label: "Pull", badgeCount: syncState.pullBadgeCount, action: { performPull() })
+                BadgeToolbarButton(icon: "arrow.up.to.line", label: "Push", badgeCount: syncState.pushBadgeCount, action: { performPush() })
+                toolbarButton(icon: "arrow.down.circle", label: "Fetch", action: { performFetch() })
                 moreMenu
             }
         } else {
             HStack(spacing: 2) {
-                toolbarButton(icon: "checkmark", label: "Commit", action: { showingCommitSheet = true })
+                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, action: { showCommitSheetIfNoConflicts() })
                 moreMenu
             }
         }
@@ -116,9 +134,9 @@ struct MainWindowView: View {
     private var moreMenu: some View {
         Menu {
             if windowWidth <= 800 {
-                Button("Pull", action: {})
-                Button("Push", action: {})
-                Button("Fetch", action: {})
+                Button("Pull") { performPull() }
+                Button("Push") { performPush() }
+                Button("Fetch") { performFetch() }
             }
             if windowWidth <= 1000 {
                 Button("Branch", action: {})
@@ -126,14 +144,43 @@ struct MainWindowView: View {
                 Button("Stash", action: {})
             }
         } label: {
-            ToolbarButtonLabel(icon: "ellipsis", label: "More")
+            ToolbarButtonLabel(icon: "ellipsis", label: "")
         }
         .help("More Actions")
     }
 
+    private func showCommitSheetIfNoConflicts() {
+        Task {
+            if await syncState.checkConflicts(repositoryURL: repositoryURL) { return }
+            showingCommitSheet = true
+        }
+    }
+
+    private func performPush() {
+        Task {
+            await syncState.performPush(repositoryURL: repositoryURL)
+        }
+    }
+
+    private func performPull() {
+        Task {
+            await syncState.performPull(repositoryURL: repositoryURL)
+        }
+    }
+
+    private func performFetch() {
+        Task {
+            await syncState.performFetch(repositoryURL: repositoryURL)
+        }
+    }
+
     private func commitFromToolbar(message: String) async {
-        // FileStatusView handles its own commit via the sheet it presents,
-        // but the toolbar sheet is wired here. For now this is a no-op
-        // since FileStatusView has its own commit logic.
+        guard !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        do {
+            try await GitStatusService.shared.commit(message: message, in: repositoryURL)
+            await syncState.refresh(repositoryURL: repositoryURL)
+        } catch {
+            syncState.showError(error.localizedDescription)
+        }
     }
 }

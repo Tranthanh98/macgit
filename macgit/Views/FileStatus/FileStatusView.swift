@@ -7,6 +7,7 @@ import SwiftUI
 
 struct FileStatusView: View {
     let repositoryURL: URL
+    var syncState: SyncState? = nil
 
     @State private var gitStatus: GitStatus = GitStatus(staged: [], unstaged: [], untracked: [])
     @State private var selectedFile: StatusFile? = nil
@@ -491,6 +492,9 @@ struct FileStatusView: View {
                 }
             }
             await loadStatus()
+            if let syncState = syncState {
+                await syncState.refresh(repositoryURL: repositoryURL)
+            }
         } catch {
             await MainActor.run {
                 errorMessage = error.localizedDescription

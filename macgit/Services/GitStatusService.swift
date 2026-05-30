@@ -311,6 +311,31 @@ actor GitStatusService {
         _ = try await runGit(arguments: ["push"], in: repositoryURL)
     }
 
+    func pull(in repositoryURL: URL) async throws {
+        _ = try await runGit(arguments: ["pull"], in: repositoryURL)
+    }
+
+    func fetch(in repositoryURL: URL) async throws {
+        _ = try await runGit(arguments: ["fetch"], in: repositoryURL)
+    }
+
+    func aheadBehindCount(in repositoryURL: URL) async -> (ahead: Int, behind: Int) {
+        let aheadOutput = (try? await runGit(arguments: ["rev-list", "--count", "@{upstream}..HEAD"], in: repositoryURL))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let behindOutput = (try? await runGit(arguments: ["rev-list", "--count", "HEAD..@{upstream}"], in: repositoryURL))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let ahead = Int(aheadOutput ?? "0") ?? 0
+        let behind = Int(behindOutput ?? "0") ?? 0
+        return (ahead: ahead, behind: behind)
+    }
+
+    func hasConflicts(in repositoryURL: URL) async -> Bool {
+        guard let status = try? await self.status(for: repositoryURL) else { return false }
+        return status.staged.contains(where: { $0.status == .conflict })
+            || status.unstaged.contains(where: { $0.status == .conflict })
+            || status.untracked.contains(where: { $0.status == .conflict })
+    }
+
     func remove(file: StatusFile, in repositoryURL: URL) async throws {
         if file.status == .untracked {
             let fileURL = repositoryURL.appendingPathComponent(file.path)
