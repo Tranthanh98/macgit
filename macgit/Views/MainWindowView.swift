@@ -310,7 +310,20 @@ struct FileStatusView: View {
                     if file.isImage {
                         imagePreview(file: file)
                     } else {
-                        DiffView(hunks: diffHunks)
+                        DiffView(
+                            hunks: diffHunks,
+                            file: file,
+                            repositoryURL: repositoryURL,
+                            onRefresh: {
+                                Task {
+                                    await loadStatus()
+                                }
+                            },
+                            onError: { message in
+                                errorMessage = message
+                                showingError = true
+                            }
+                        )
                     }
                 }
             } else {
