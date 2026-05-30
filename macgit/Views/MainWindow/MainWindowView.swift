@@ -19,6 +19,7 @@ struct MainWindowView: View {
     @State private var showingCommitSheet = false
     @State private var showingPullSheet = false
     @State private var showingPushSheet = false
+    @State private var showingFetchSheet = false
     @StateObject private var syncState = SyncState()
 
     var body: some View {
@@ -122,6 +123,13 @@ struct MainWindowView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingFetchSheet) {
+            FetchSheetView(repositoryURL: repositoryURL) { options in
+                Task {
+                    await syncState.performFetch(options: options, repositoryURL: repositoryURL)
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -129,25 +137,25 @@ struct MainWindowView: View {
         let syncing = syncState.isAnySyncing
         if windowWidth > 1000 {
             HStack(spacing: 2) {
-                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing, action: { showCommitSheetIfNoConflicts() })
+                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing || syncState.stagedBadgeCount == 0, action: { showCommitSheetIfNoConflicts() })
                 BadgeToolbarButton(icon: "arrow.down.to.line", label: "Pull", badgeCount: syncState.pullBadgeCount, isLoading: syncState.isPulling, disabled: syncing, action: { showingPullSheet = true })
                 BadgeToolbarButton(icon: "arrow.up.to.line", label: "Push", badgeCount: syncState.pushBadgeCount, isLoading: syncState.isPushing, disabled: syncing, action: { showingPushSheet = true })
-                toolbarButton(icon: "arrow.down.circle", label: "Fetch", isLoading: syncState.isFetching, disabled: syncing, action: { performFetch() })
+                toolbarButton(icon: "arrow.down.circle", label: "Fetch", isLoading: syncState.isFetching, disabled: syncing, action: { showingFetchSheet = true })
                 toolbarButton(icon: "arrow.triangle.branch", label: "Branch", action: {})
                 toolbarButton(icon: "arrow.triangle.merge", label: "Merge", action: {})
                 toolbarButton(icon: "archivebox", label: "Stash", action: {})
             }
         } else if windowWidth > 800 {
             HStack(spacing: 2) {
-                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing, action: { showCommitSheetIfNoConflicts() })
+                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing || syncState.stagedBadgeCount == 0, action: { showCommitSheetIfNoConflicts() })
                 BadgeToolbarButton(icon: "arrow.down.to.line", label: "Pull", badgeCount: syncState.pullBadgeCount, isLoading: syncState.isPulling, disabled: syncing, action: { showingPullSheet = true })
                 BadgeToolbarButton(icon: "arrow.up.to.line", label: "Push", badgeCount: syncState.pushBadgeCount, isLoading: syncState.isPushing, disabled: syncing, action: { showingPushSheet = true })
-                toolbarButton(icon: "arrow.down.circle", label: "Fetch", isLoading: syncState.isFetching, disabled: syncing, action: { performFetch() })
+                toolbarButton(icon: "arrow.down.circle", label: "Fetch", isLoading: syncState.isFetching, disabled: syncing, action: { showingFetchSheet = true })
                 moreMenu
             }
         } else {
             HStack(spacing: 2) {
-                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing, action: { showCommitSheetIfNoConflicts() })
+                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing || syncState.stagedBadgeCount == 0, action: { showCommitSheetIfNoConflicts() })
                 moreMenu
             }
         }
@@ -161,7 +169,7 @@ struct MainWindowView: View {
                     .disabled(syncing)
                 Button("Push") { showingPushSheet = true }
                     .disabled(syncing)
-                Button("Fetch") { performFetch() }
+                Button("Fetch") { showingFetchSheet = true }
                     .disabled(syncing)
             }
             if windowWidth <= 1000 {
@@ -179,12 +187,6 @@ struct MainWindowView: View {
         Task {
             if await syncState.checkConflicts(repositoryURL: repositoryURL) { return }
             showingCommitSheet = true
-        }
-    }
-
-    private func performFetch() {
-        Task {
-            await syncState.performFetch(repositoryURL: repositoryURL)
         }
     }
 

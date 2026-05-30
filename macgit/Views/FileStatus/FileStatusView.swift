@@ -603,6 +603,7 @@ struct FileStatusView: View {
         do {
             try await GitStatusService.shared.stage(file: file, in: repositoryURL)
             await loadStatus()
+            await syncState?.refresh(repositoryURL: repositoryURL)
         } catch {
             errorMessage = error.localizedDescription
             showingError = true
@@ -613,6 +614,7 @@ struct FileStatusView: View {
         do {
             try await GitStatusService.shared.unstage(file: file, in: repositoryURL)
             await loadStatus()
+            await syncState?.refresh(repositoryURL: repositoryURL)
         } catch {
             errorMessage = error.localizedDescription
             showingError = true
@@ -634,6 +636,7 @@ struct FileStatusView: View {
         do {
             try await GitStatusService.shared.stageAll(files: changedFiles, in: repositoryURL)
             await loadStatus()
+            await syncState?.refresh(repositoryURL: repositoryURL)
         } catch {
             errorMessage = error.localizedDescription
             showingError = true
@@ -645,6 +648,7 @@ struct FileStatusView: View {
         do {
             try await GitStatusService.shared.unstageAll(files: gitStatus.staged, in: repositoryURL)
             await loadStatus()
+            await syncState?.refresh(repositoryURL: repositoryURL)
         } catch {
             errorMessage = error.localizedDescription
             showingError = true

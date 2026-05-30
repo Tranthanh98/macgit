@@ -8,6 +8,7 @@ import Combine
 
 class SyncState: ObservableObject {
     @Published var commitBadgeCount: Int = 0
+    @Published var stagedBadgeCount: Int = 0
     @Published var pushBadgeCount: Int = 0
     @Published var pullBadgeCount: Int = 0
     @Published var errorMessage: String? = nil
@@ -34,6 +35,7 @@ class SyncState: ObservableObject {
             let counts = await GitStatusService.shared.aheadBehindCount(in: repositoryURL)
             await MainActor.run {
                 self.commitBadgeCount = totalChanges
+                self.stagedBadgeCount = status.staged.count
                 self.pushBadgeCount = counts.ahead
                 self.pullBadgeCount = counts.behind
             }
@@ -121,12 +123,12 @@ class SyncState: ObservableObject {
         }
     }
 
-    func performFetch(repositoryURL: URL) async {
+    func performFetch(options: GitStatusService.FetchOptions, repositoryURL: URL) async {
         await MainActor.run { isFetching = true }
         defer { Task { @MainActor in isFetching = false } }
         let before = await GitStatusService.shared.aheadBehindCount(in: repositoryURL)
         do {
-            try await GitStatusService.shared.fetch(in: repositoryURL)
+            try await GitStatusService.shared.fetch(options: options, in: repositoryURL)
             let after = await GitStatusService.shared.aheadBehindCount(in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
             if after.behind <= before.behind {

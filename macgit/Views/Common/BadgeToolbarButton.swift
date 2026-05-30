@@ -24,7 +24,6 @@ struct BadgeToolbarButton: View {
         Button(action: action) {
             ZStack(alignment: .topTrailing) {
                 ToolbarButtonLabel(icon: icon, label: label)
-                    .frame(minWidth: 44)
                     .opacity(isLoading ? 0.3 : 1.0)
 
                 if badgeCount > 0 && !isLoading {
@@ -48,9 +47,9 @@ struct BadgeToolbarButton: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .frame(minWidth: 44)
         }
         .help(label)
-        .buttonStyle(.plain)
         .disabled(disabled || isLoading)
     }
 }

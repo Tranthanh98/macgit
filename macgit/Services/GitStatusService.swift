@@ -361,8 +361,24 @@ actor GitStatusService {
         return try await runGit(arguments: arguments, in: repositoryURL)
     }
 
-    func fetch(in repositoryURL: URL) async throws {
-        _ = try await runGit(arguments: ["fetch"], in: repositoryURL)
+    struct FetchOptions {
+        var fetchAllRemotes: Bool = true
+        var prune: Bool = false
+        var fetchTags: Bool = false
+    }
+
+    func fetch(options: FetchOptions, in repositoryURL: URL) async throws {
+        var arguments = ["fetch"]
+        if options.fetchAllRemotes {
+            arguments.append("--all")
+        }
+        if options.prune {
+            arguments.append("--prune")
+        }
+        if options.fetchTags {
+            arguments.append("--tags")
+        }
+        _ = try await runGit(arguments: arguments, in: repositoryURL)
     }
 
     func remotes(in repositoryURL: URL) async -> [String] {
