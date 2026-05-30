@@ -552,6 +552,87 @@ actor GitStatusService {
         }
     }
 
+    // MARK: - Commit History
+
+    func commitHistory(allBranches: Bool, in repositoryURL: URL) async -> [Commit] {
+        var arguments = ["log"]
+        if allBranches {
+            arguments.append("--all")
+        }
+        arguments.append(contentsOf: [
+            "--format=%H%x00%P%x00%s%x00%an%x00%ae%x00%ad%x00%D",
+            "--date=iso-strict",
+            "-n", "500"
+        ])
+
+        let output = (try? await runGit(arguments: arguments, in: repositoryURL)) ?? ""
+        return parseCommitLog(output)
+    }
+
+    func changedFiles(in commit: String, in repositoryURL: URL) async -> [CommitFileChange] {
+        let output = (try? await runGit(arguments: ["show", "--name-status", "--format=", commit], in: repositoryURL)) ?? ""
+        var changes: [CommitFileChange] = []
+        for line in output.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            let parts = trimmed.split(separator: "\t", maxSplits: 1)
+            guard parts.count >= 2 else { continue }
+            let statusCode = String(parts[0]).trimmingCharacters(in: .whitespaces)
+            let path = String(parts[1]).trimmingCharacters(in: .whitespaces)
+
+            let status: CommitFileStatus
+            switch statusCode.prefix(1) {
+            case "A": status = .added
+            case "M": status = .modified
+            case "D": status = .deleted
+            case "R": status = .renamed
+            case "C": status = .copied
+            default: status = .modified
+            }
+            changes.append(CommitFileChange(path: path, status: status))
+        }
+        return changes
+    }
+
+    func diff(for file: String, in commit: String, in repositoryURL: URL) async -> [DiffHunk] {
+        let output = (try? await runGit(arguments: ["show", "--no-color", "-p", commit, "--", file], in: repositoryURL)) ?? ""
+        // Strip the commit header; diff starts at "diff --git"
+        guard let diffStart = output.range(of: "diff --git") else { return [] }
+        let diffText = String(output[diffStart.lowerBound...])
+        return DiffParser.parse(diffText)
+    }
+
+    func checkoutCommit(_ commit: String, in repositoryURL: URL) async throws {
+        _ = try await runGit(arguments: ["checkout", commit], in: repositoryURL)
+    }
+
+    func cherryPickCommit(_ commit: String, in repositoryURL: URL) async throws {
+        _ = try await runGit(arguments: ["cherry-pick", commit], in: repositoryURL)
+    }
+
+    private func parseCommitLog(_ raw: String) -> [Commit] {
+        let dateFormatter = ISO8601DateFormatter()
+        var commits: [Commit] = []
+        for line in raw.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { continue }
+            let parts = trimmed.split(separator: "\u{0000}", omittingEmptySubsequences: false)
+            guard parts.count >= 6 else { continue }
+            let hash = String(parts[0])
+            let parentStr = String(parts[1])
+            let parents = parentStr.isEmpty ? [] : parentStr.split(separator: " ").map { String($0) }
+            let message = String(parts[2])
+            let author = String(parts[3])
+            let email = String(parts[4])
+            let dateStr = String(parts[5])
+            let refsPart = parts.count > 6 ? String(parts[6]) : ""
+            let refs = refsPart.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            let date = dateFormatter.date(from: dateStr) ?? Date()
+            commits.append(Commit(hash: hash, parents: parents, message: message, author: author, email: email, date: date, refs: refs))
+        }
+        return commits
+    }
+
     func diff(for file: StatusFile, in repositoryURL: URL) async throws -> [DiffHunk] {
         // Untracked file → read directly and show all lines as added (green)
         if file.status == .untracked {
