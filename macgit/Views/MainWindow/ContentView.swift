@@ -13,7 +13,7 @@ struct ContentView: View {
 
     @State private var repositoryURL: URL?
     @State private var showingRepoPickerSheet = false
-    @State private var repoPickerShowCloneInitially = false
+    @State private var showingCloneSheet = false
     @State private var showingKeepCurrentAlert = false
     @State private var pendingAction: FileMenuAction?
 
@@ -23,24 +23,29 @@ struct ContentView: View {
                 MainWindowView(repositoryURL: url)
             } else {
                 RepoPickerView(
-                    showCloneSheetInitially: repoPickerShowCloneInitially,
+                    showCloneSheetInitially: false,
                     onRepositoryOpened: { url in
                         repositoryURL = url
-                        repoPickerShowCloneInitially = false
                     }
                 )
             }
         }
         .sheet(isPresented: $showingRepoPickerSheet) {
             RepoPickerView(
-                showCloneSheetInitially: repoPickerShowCloneInitially,
+                showCloneSheetInitially: false,
                 onRepositoryOpened: { url in
                     showingRepoPickerSheet = false
-                    repoPickerShowCloneInitially = false
                     repositoryURL = url
                 }
             )
             .frame(minWidth: 560, minHeight: 480)
+        }
+        .sheet(isPresented: $showingCloneSheet) {
+            CloneSheetView(onClone: { url in
+                showingCloneSheet = false
+                repositoryURL = url
+            })
+            .frame(minWidth: 480)
         }
         .alert("Current Repository is Open", isPresented: $showingKeepCurrentAlert) {
             Button("Cancel", role: .cancel) {}
@@ -58,7 +63,14 @@ struct ContentView: View {
             appState.fileMenuAction = nil
 
             switch action {
-            case .new, .open, .openRecent:
+            case .new:
+                if repositoryURL == nil {
+                    showingCloneSheet = true
+                } else {
+                    appState.openWindowWithCloneSheet = true
+                    openWindow(id: "main")
+                }
+            case .open, .openRecent:
                 if repositoryURL != nil {
                     pendingAction = action
                     showingKeepCurrentAlert = true
@@ -84,11 +96,8 @@ struct ContentView: View {
             appState.newWindowRepoURL = nil
         }
         if appState.openWindowWithCloneSheet {
-            repoPickerShowCloneInitially = true
             appState.openWindowWithCloneSheet = false
-            if repositoryURL == nil {
-                showingRepoPickerSheet = true
-            }
+            showingCloneSheet = true
         }
     }
 
@@ -99,14 +108,12 @@ struct ContentView: View {
                 appState.openWindowWithCloneSheet = true
                 openWindow(id: "main")
             } else {
-                repoPickerShowCloneInitially = true
-                showingRepoPickerSheet = true
+                showingCloneSheet = true
             }
         case .open:
             if inNewWindow {
                 openWindow(id: "main")
             } else {
-                repoPickerShowCloneInitially = false
                 showingRepoPickerSheet = true
             }
         case .openRecent(let url):

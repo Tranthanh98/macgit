@@ -25,6 +25,7 @@ struct MainWindowView: View {
     @State private var showingStashSheet = false
     @StateObject private var syncState = SyncState()
     @State private var repoIconName: String = "code-branch"
+    @State private var remoteURLString: String = ""
 
     var body: some View {
         NavigationSplitView {
@@ -80,10 +81,10 @@ struct MainWindowView: View {
             }
 
             ToolbarItem(placement: .automatic) {
-                toolbarButton(icon: "network", label: "Remote", action: {})
+                toolbarButton(icon: "network", label: "Remote", disabled: remoteURLString.isEmpty, action: openRemoteURL)
             }
             ToolbarItem(placement: .automatic) {
-                toolbarButton(icon: "folder", label: "Finder", action: {})
+                toolbarButton(icon: "folder", label: "Finder", action: showInFinder)
             }
             ToolbarItem(placement: .automatic) {
                 toolbarButton(icon: "terminal", label: "Terminal", action: {})
@@ -99,6 +100,7 @@ struct MainWindowView: View {
             syncState.startBackgroundSync(repositoryURL: repositoryURL)
             let remoteURLString = await GitStatusService.shared.remoteURL(remote: "origin", in: repositoryURL)
             if !remoteURLString.isEmpty {
+                self.remoteURLString = remoteURLString
                 repoIconName = determineRepoIconName(from: remoteURLString)
             }
         }
@@ -238,5 +240,44 @@ struct MainWindowView: View {
 
     private func commitFromToolbar(message: String) async {
         await syncState.performCommit(message: message, repositoryURL: repositoryURL)
+    }
+
+    private func openRemoteURL() {
+        guard let url = browserURL(from: remoteURLString) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func showInFinder() {
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: repositoryURL.path)
+    }
+
+    private func browserURL(from remoteURLString: String) -> URL? {
+        var cleaned = remoteURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Convert SSH URL format: git@host:user/repo.git -> https://host/user/repo.git
+        if cleaned.hasPrefix("git@") {
+            let withoutPrefix = cleaned.dropFirst("git@".count)
+            if let colonIndex = withoutPrefix.firstIndex(of: ":") {
+                let host = withoutPrefix[..<colonIndex]
+                let path = withoutPrefix[withoutPrefix.index(after: colonIndex)...]
+                cleaned = "https://\(host)/\(path)"
+            }
+        }
+
+        // Convert ssh:// format: ssh://git@host/user/repo.git -> https://host/user/repo.git
+        if cleaned.hasPrefix("ssh://") {
+            cleaned = String(cleaned.dropFirst("ssh://".count))
+            if cleaned.hasPrefix("git@") {
+                cleaned = String(cleaned.dropFirst("git@".count))
+            }
+            cleaned = "https://\(cleaned)"
+        }
+
+        // Remove .git suffix
+        if cleaned.hasSuffix(".git") {
+            cleaned = String(cleaned.dropLast(".git".count))
+        }
+
+        return URL(string: cleaned)
     }
 }
