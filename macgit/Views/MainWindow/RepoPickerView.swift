@@ -13,7 +13,13 @@ struct RepoPickerView: View {
     @State private var errorMessage: String?
     @State private var showingError = false
 
+    var showCloneSheetInitially: Bool
     var onRepositoryOpened: (URL) -> Void
+
+    init(showCloneSheetInitially: Bool = false, onRepositoryOpened: @escaping (URL) -> Void) {
+        self.showCloneSheetInitially = showCloneSheetInitially
+        self.onRepositoryOpened = onRepositoryOpened
+    }
 
     var body: some View {
         VStack(spacing: 24) {
@@ -101,6 +107,11 @@ struct RepoPickerView: View {
         }
         .frame(minWidth: 560, minHeight: 480)
         .padding(40)
+        .task(id: showCloneSheetInitially) {
+            if showCloneSheetInitially {
+                showingCloneSheet = true
+            }
+        }
         .alert("Error", isPresented: $showingError, actions: {
             Button("OK", role: .cancel) {}
         }, message: {
