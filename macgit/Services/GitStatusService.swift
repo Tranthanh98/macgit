@@ -379,6 +379,21 @@ actor GitStatusService {
         return try await runGit(arguments: arguments, in: repositoryURL)
     }
 
+    struct StashOptions {
+        var message: String = ""
+        var keepIndex: Bool = false
+    }
+
+    func stash(options: StashOptions, in repositoryURL: URL) async throws {
+        var arguments = ["stash", "push"]
+        if options.keepIndex { arguments.append("--keep-index") }
+        if !options.message.isEmpty {
+            arguments.append("-m")
+            arguments.append(options.message)
+        }
+        _ = try await runGit(arguments: arguments, in: repositoryURL)
+    }
+
     struct FetchOptions {
         var fetchAllRemotes: Bool = true
         var prune: Bool = false

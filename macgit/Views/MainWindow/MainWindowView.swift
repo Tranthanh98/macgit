@@ -22,6 +22,7 @@ struct MainWindowView: View {
     @State private var showingFetchSheet = false
     @State private var showingBranchSheet = false
     @State private var showingMergeSheet = false
+    @State private var showingStashSheet = false
     @StateObject private var syncState = SyncState()
     @State private var repoIconName: String = "code-branch"
 
@@ -161,6 +162,13 @@ struct MainWindowView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingStashSheet) {
+            StashSheetView { options in
+                Task {
+                    await syncState.performStash(options: options, repositoryURL: repositoryURL)
+                }
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task {
                 await syncState.refresh(repositoryURL: repositoryURL)
@@ -179,7 +187,7 @@ struct MainWindowView: View {
                 toolbarButton(icon: "arrow.down.circle", label: "Fetch", isLoading: syncState.isFetching, disabled: syncing, action: { showingFetchSheet = true })
                 toolbarButton(icon: "arrow.triangle.branch", label: "Branch", action: { showingBranchSheet = true })
                 toolbarButton(icon: "arrow.triangle.merge", label: "Merge", isLoading: syncState.isMerging, disabled: syncing, action: { showingMergeSheet = true })
-                toolbarButton(icon: "archivebox", label: "Stash", action: {})
+                toolbarButton(icon: "archivebox", label: "Stash", isLoading: syncState.isStashing, disabled: syncing || syncState.stashableCount == 0, action: { showingStashSheet = true })
             }
         } else if windowWidth > 800 {
             HStack(spacing: 2) {
@@ -212,7 +220,8 @@ struct MainWindowView: View {
                 Button("Branch") { showingBranchSheet = true }
                 Button("Merge") { showingMergeSheet = true }
                     .disabled(syncing)
-                Button("Stash", action: {})
+                Button("Stash", action: { showingStashSheet = true })
+                    .disabled(syncing || syncState.stashableCount == 0)
             }
         } label: {
             ToolbarButtonLabel(icon: "ellipsis", label: "")

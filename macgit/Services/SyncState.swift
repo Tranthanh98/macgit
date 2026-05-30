@@ -13,6 +13,7 @@ extension Notification.Name {
 class SyncState: ObservableObject {
     @Published var commitBadgeCount: Int = 0
     @Published var stagedBadgeCount: Int = 0
+    @Published var stashableCount: Int = 0
     @Published var pushBadgeCount: Int = 0
     @Published var pullBadgeCount: Int = 0
     @Published var errorMessage: String? = nil
@@ -26,9 +27,10 @@ class SyncState: ObservableObject {
     @Published var isPulling: Bool = false
     @Published var isFetching: Bool = false
     @Published var isMerging: Bool = false
+    @Published var isStashing: Bool = false
 
     var isAnySyncing: Bool {
-        isCommitting || isPushing || isPulling || isFetching || isMerging
+        isCommitting || isPushing || isPulling || isFetching || isMerging || isStashing
     }
 
     private var backgroundTask: Task<Void, Never>? = nil
@@ -41,6 +43,7 @@ class SyncState: ObservableObject {
             await MainActor.run {
                 self.commitBadgeCount = totalChanges
                 self.stagedBadgeCount = status.staged.count
+                self.stashableCount = status.staged.count + status.unstaged.count
                 self.pushBadgeCount = counts.ahead
                 self.pullBadgeCount = counts.behind
             }
@@ -187,6 +190,19 @@ class SyncState: ObservableObject {
             } else {
                 showError(message)
             }
+        }
+    }
+
+    func performStash(options: GitStatusService.StashOptions, repositoryURL: URL) async {
+        await MainActor.run { isStashing = true }
+        defer { Task { @MainActor in isStashing = false } }
+        do {
+            try await GitStatusService.shared.stash(options: options, in: repositoryURL)
+            await refresh(repositoryURL: repositoryURL)
+            notifyRepositoryChanged(repositoryURL)
+            showInfo("Changes stashed successfully.")
+        } catch {
+            showError(error.localizedDescription)
         }
     }
 }
