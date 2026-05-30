@@ -98,6 +98,18 @@ struct FileStatusView: View {
                 }
             )
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task {
+                await loadStatus()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .repositoryDidChange)) { notification in
+            if let url = notification.userInfo?["repositoryURL"] as? URL, url == repositoryURL {
+                Task {
+                    await loadStatus()
+                }
+            }
+        }
     }
 
     private var fileListPanel: some View {

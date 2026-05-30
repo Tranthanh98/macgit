@@ -6,6 +6,10 @@
 import SwiftUI
 import Combine
 
+extension Notification.Name {
+    static let repositoryDidChange = Notification.Name("macgit.repositoryDidChange")
+}
+
 class SyncState: ObservableObject {
     @Published var commitBadgeCount: Int = 0
     @Published var stagedBadgeCount: Int = 0
@@ -65,6 +69,10 @@ class SyncState: ObservableObject {
         showingError = true
     }
 
+    private func notifyRepositoryChanged(_ repositoryURL: URL) {
+        NotificationCenter.default.post(name: .repositoryDidChange, object: nil, userInfo: ["repositoryURL": repositoryURL])
+    }
+
     func showConflict(_ message: String) {
         conflictMessage = message
         showingConflict = true
@@ -90,6 +98,7 @@ class SyncState: ObservableObject {
         do {
             let output = try await GitStatusService.shared.push(options: options, in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
+            notifyRepositoryChanged(repositoryURL)
             let trimmed = output.lowercased()
             if trimmed.contains("everything up-to-date") || trimmed.contains("everything up to date") {
                 showInfo("Everything up-to-date.")
@@ -108,6 +117,7 @@ class SyncState: ObservableObject {
         do {
             let output = try await GitStatusService.shared.pull(remote: remote, branch: branch, options: options, in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
+            notifyRepositoryChanged(repositoryURL)
             let trimmed = output.lowercased()
             if trimmed.contains("already up to date") || trimmed.contains("already up-to-date") {
                 showInfo("Already up to date.")
@@ -132,6 +142,7 @@ class SyncState: ObservableObject {
             try await GitStatusService.shared.fetch(options: options, in: repositoryURL)
             let after = await GitStatusService.shared.aheadBehindCount(in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
+            notifyRepositoryChanged(repositoryURL)
             if after.behind <= before.behind {
                 showInfo("No new changes on remote.")
             }
@@ -147,6 +158,7 @@ class SyncState: ObservableObject {
         do {
             try await GitStatusService.shared.commit(message: message, in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
+            notifyRepositoryChanged(repositoryURL)
         } catch {
             showError(error.localizedDescription)
         }
@@ -159,6 +171,7 @@ class SyncState: ObservableObject {
         do {
             let output = try await GitStatusService.shared.merge(branch: branch, options: options, in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
+            notifyRepositoryChanged(repositoryURL)
             let trimmed = output.lowercased()
             if options.squash {
                 showInfo("Squash merge completed. Changes are staged.")
