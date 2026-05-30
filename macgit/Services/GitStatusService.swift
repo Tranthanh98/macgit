@@ -407,6 +407,44 @@ actor GitStatusService {
         return url
     }
 
+    func createBranch(name: String, checkout: Bool, commit: String?, in repositoryURL: URL) async throws -> String {
+        if checkout {
+            var arguments = ["checkout", "-b", name]
+            if let commit = commit, !commit.isEmpty {
+                arguments.append(commit)
+            }
+            return try await runGit(arguments: arguments, in: repositoryURL)
+        } else {
+            var arguments = ["branch", name]
+            if let commit = commit, !commit.isEmpty {
+                arguments.append(commit)
+            }
+            return try await runGit(arguments: arguments, in: repositoryURL)
+        }
+    }
+
+    func deleteBranch(name: String, force: Bool, in repositoryURL: URL) async throws -> String {
+        let flag = force ? "-D" : "-d"
+        return try await runGit(arguments: ["branch", flag, name], in: repositoryURL)
+    }
+
+    func deleteRemoteBranch(remote: String, name: String, in repositoryURL: URL) async throws -> String {
+        return try await runGit(arguments: ["push", remote, "--delete", name], in: repositoryURL)
+    }
+
+    func recentCommits(limit: Int, in repositoryURL: URL) async -> [(hash: String, message: String)] {
+        let output = (try? await runGit(arguments: ["log", "--oneline", "-\(limit)"], in: repositoryURL)) ?? ""
+        return output.split(separator: "\n").compactMap { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return nil }
+            // Format: "<short-hash> <message>"
+            let parts = trimmed.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: false)
+            guard let hash = parts.first else { return nil }
+            let message = parts.count > 1 ? String(parts[1]) : ""
+            return (hash: String(hash), message: message)
+        }
+    }
+
     func aheadBehindCount(in repositoryURL: URL) async -> (ahead: Int, behind: Int) {
         let aheadOutput = (try? await runGit(arguments: ["rev-list", "--count", "@{upstream}..HEAD"], in: repositoryURL))?
             .trimmingCharacters(in: .whitespacesAndNewlines)

@@ -20,6 +20,7 @@ struct MainWindowView: View {
     @State private var showingPullSheet = false
     @State private var showingPushSheet = false
     @State private var showingFetchSheet = false
+    @State private var showingBranchSheet = false
     @StateObject private var syncState = SyncState()
 
     var body: some View {
@@ -130,6 +131,13 @@ struct MainWindowView: View {
                 }
             }
         }
+        .sheet(isPresented: $showingBranchSheet) {
+            BranchSheetView(repositoryURL: repositoryURL) {
+                Task {
+                    await syncState.refresh(repositoryURL: repositoryURL)
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -141,7 +149,7 @@ struct MainWindowView: View {
                 BadgeToolbarButton(icon: "arrow.down.to.line", label: "Pull", badgeCount: syncState.pullBadgeCount, isLoading: syncState.isPulling, disabled: syncing, action: { showingPullSheet = true })
                 BadgeToolbarButton(icon: "arrow.up.to.line", label: "Push", badgeCount: syncState.pushBadgeCount, isLoading: syncState.isPushing, disabled: syncing, action: { showingPushSheet = true })
                 toolbarButton(icon: "arrow.down.circle", label: "Fetch", isLoading: syncState.isFetching, disabled: syncing, action: { showingFetchSheet = true })
-                toolbarButton(icon: "arrow.triangle.branch", label: "Branch", action: {})
+                toolbarButton(icon: "arrow.triangle.branch", label: "Branch", action: { showingBranchSheet = true })
                 toolbarButton(icon: "arrow.triangle.merge", label: "Merge", action: {})
                 toolbarButton(icon: "archivebox", label: "Stash", action: {})
             }
@@ -173,7 +181,7 @@ struct MainWindowView: View {
                     .disabled(syncing)
             }
             if windowWidth <= 1000 {
-                Button("Branch", action: {})
+                Button("Branch") { showingBranchSheet = true }
                 Button("Merge", action: {})
                 Button("Stash", action: {})
             }
