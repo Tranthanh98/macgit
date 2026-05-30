@@ -311,6 +311,63 @@ actor GitStatusService {
         _ = try await runGit(arguments: ["push"], in: repositoryURL)
     }
 
+    func remove(file: StatusFile, in repositoryURL: URL) async throws {
+        if file.status == .untracked {
+            let fileURL = repositoryURL.appendingPathComponent(file.path)
+            try FileManager.default.removeItem(at: fileURL)
+        } else {
+            _ = try await runGit(arguments: ["rm", "-f", file.path], in: repositoryURL)
+        }
+    }
+
+    func ignore(file: StatusFile, in repositoryURL: URL) async throws {
+        try await ignore(file: file, pattern: file.path, in: repositoryURL)
+    }
+
+    func ignore(file: StatusFile, pattern: String, in repositoryURL: URL) async throws {
+        let gitignoreURL = repositoryURL.appendingPathComponent(".gitignore")
+        let entry = "\(pattern)\n"
+
+        if FileManager.default.fileExists(atPath: gitignoreURL.path) {
+            let handle = try FileHandle(forWritingTo: gitignoreURL)
+            defer { try? handle.close() }
+            handle.seekToEndOfFile()
+            if let data = entry.data(using: .utf8) {
+                handle.write(data)
+            }
+        } else {
+            try entry.write(to: gitignoreURL, atomically: true, encoding: .utf8)
+        }
+
+        if file.status != .untracked {
+            _ = try? await runGit(arguments: ["rm", "--cached", file.path], in: repositoryURL)
+        }
+    }
+
+    enum ConflictResolution {
+        case ours, theirs
+    }
+
+    func resolveConflict(file: StatusFile, in repositoryURL: URL, using: ConflictResolution) async throws {
+        let flag = using == .ours ? "--ours" : "--theirs"
+        _ = try await runGit(arguments: ["checkout", flag, "--", file.path], in: repositoryURL)
+        _ = try await runGit(arguments: ["add", file.path], in: repositoryURL)
+    }
+
+    func resetToCommit(file: StatusFile, commit: String, in repositoryURL: URL) async throws {
+        _ = try await runGit(arguments: ["checkout", commit, "--", file.path], in: repositoryURL)
+    }
+
+    func recentCommits(in repositoryURL: URL, count: Int = 10) async -> [(hash: String, message: String)] {
+        let output = (try? await runGit(arguments: ["log", "--oneline", "-\(count)"], in: repositoryURL)) ?? ""
+        return output.split(separator: "\n").compactMap { line in
+            let parts = line.split(separator: " ", maxSplits: 1)
+            guard let hash = parts.first else { return nil }
+            let message = parts.count > 1 ? String(parts[1]) : ""
+            return (hash: String(hash), message: message)
+        }
+    }
+
     func diff(for file: StatusFile, in repositoryURL: URL) async throws -> [DiffHunk] {
         // Untracked file → read directly and show all lines as added (green)
         if file.status == .untracked {

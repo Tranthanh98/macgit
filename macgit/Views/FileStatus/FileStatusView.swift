@@ -23,6 +23,8 @@ struct FileStatusView: View {
     @State private var pushAfterCommit = false
     @State private var commitAuthor: String?
     @State private var currentBranch: String?
+    @State private var recentCommits: [(hash: String, message: String)] = []
+    @State private var ignoreTargetFile: StatusFile? = nil
 
     private var changedFiles: [StatusFile] {
         gitStatus.unstaged + gitStatus.untracked
@@ -66,11 +68,35 @@ struct FileStatusView: View {
         .task {
             await loadStatus()
         }
+        .onChange(of: selectedFile) { _, newFile in
+            if let file = newFile {
+                Task {
+                    await loadDiff(for: file)
+                }
+            } else {
+                diffHunks = []
+            }
+        }
         .alert("Error", isPresented: $showingError, actions: {
             Button("OK", role: .cancel) {}
         }, message: {
             Text(errorMessage ?? "An unknown error occurred")
         })
+        .sheet(item: $ignoreTargetFile) { file in
+            IgnoreOptionsView(
+                file: file,
+                repositoryURL: repositoryURL,
+                onConfirm: { pattern in
+                    Task {
+                        await confirmIgnore(file: file, pattern: pattern)
+                        ignoreTargetFile = nil
+                    }
+                },
+                onCancel: {
+                    ignoreTargetFile = nil
+                }
+            )
+        }
     }
 
     private var fileListPanel: some View {
@@ -91,7 +117,7 @@ struct FileStatusView: View {
                         Button("Unstage All") {
                             Task { await unstageAll() }
                         }
-                        .buttonStyle(GlassButtonStyle(tint: .accentColor, fontSize: 10))
+                        .buttonStyle(GlassButtonStyle(tint: .yellow, fontSize: 10))
                     }
                     .padding(.horizontal, 4)
                 }
@@ -123,53 +149,130 @@ struct FileStatusView: View {
     }
 
     private func fileRow(file: StatusFile, isStaged: Bool) -> some View {
-        HStack(spacing: 10) {
-            Toggle("", isOn: Binding(
-                get: { isStaged },
-                set: { newValue in
-                    Task {
-                        if newValue {
-                            await stage(file: file)
-                        } else {
-                            await unstage(file: file)
+        HStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Toggle("", isOn: Binding(
+                    get: { isStaged },
+                    set: { newValue in
+                        Task {
+                            if newValue {
+                                await stage(file: file)
+                            } else {
+                                await unstage(file: file)
+                            }
+                        }
+                    }
+                ))
+                .toggleStyle(.checkbox)
+                .labelsHidden()
+
+                Image(systemName: fileIcon(for: file))
+                    .foregroundStyle(fileColor(for: file))
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 18)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(file.displayName)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                    if let original = file.originalPath {
+                        Text("\(original) → \(file.path)")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else {
+                        Text(file.directory)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(.vertical, 3)
+            .padding(.horizontal, 2)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                selectedFile = file
+            }
+
+            moreButton(file: file, isStaged: isStaged)
+                .padding(.trailing, 4)
+        }
+        .contextMenu {
+            fileContextMenu(file: file, isStaged: isStaged)
+        }
+    }
+
+    private func moreButton(file: StatusFile, isStaged: Bool) -> some View {
+        Menu {
+            if isStaged {
+                Button("Unstage") { Task { await unstage(file: file) } }
+                Button("Remove") { Task { await remove(file: file) } }
+            } else {
+                Button("Stage") { Task { await stage(file: file) } }
+                Button("Discard") { Task { await discard(file: file) } }
+                Button("Remove") { Task { await remove(file: file) } }
+                if file.status == .untracked || file.status == .added {
+                    Button("Ignore") { ignoreTargetFile = file }
+                }
+            }
+            Divider()
+            Button("Show in Finder") { showInFinder(file: file) }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 24)
+    }
+
+    @ViewBuilder
+    private func fileContextMenu(file: StatusFile, isStaged: Bool) -> some View {
+        Button("Open") { openFile(file: file) }
+        Button("Show in Finder") { showInFinder(file: file) }
+        Divider()
+
+        if isStaged {
+            Button("Unstage") { Task { await unstage(file: file) } }
+            Button("Remove") { Task { await remove(file: file) } }
+        } else {
+            Button("Stage") { Task { await stage(file: file) } }
+            Button("Discard") { Task { await discard(file: file) } }
+            Button("Remove") { Task { await remove(file: file) } }
+            if file.status == .untracked || file.status == .added {
+                Button("Ignore") { ignoreTargetFile = file }
+            }
+        }
+
+        Divider()
+
+        if !isStaged {
+            Button("Reset") { Task { await discard(file: file) } }
+
+            if !recentCommits.isEmpty {
+                Menu("Reset to Commit...") {
+                    ForEach(recentCommits, id: \.hash) { commit in
+                        Button("\(commit.hash) \(commit.message)") {
+                            Task { await resetToCommit(file: file, commit: commit.hash) }
                         }
                     }
                 }
-            ))
-            .toggleStyle(.checkbox)
-            .labelsHidden()
-
-            Image(systemName: fileIcon(for: file))
-                .foregroundStyle(fileColor(for: file))
-                .font(.system(size: 14, weight: .medium))
-                .frame(width: 18)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(file.displayName)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                if let original = file.originalPath {
-                    Text("\(original) → \(file.path)")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else {
-                    Text(file.directory)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
             }
 
-            Spacer()
-        }
-        .padding(.vertical, 3)
-        .padding(.horizontal, 2)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            selectedFile = file
-            Task {
-                await loadDiff(for: file)
+            if file.status == .conflict {
+                Menu("Resolve Conflicts") {
+                    Button("Resolve Using 'Ours'") {
+                        Task { await resolveConflict(file: file, using: .ours) }
+                    }
+                    Button("Resolve Using 'Theirs'") {
+                        Task { await resolveConflict(file: file, using: .theirs) }
+                    }
+                }
             }
         }
     }
@@ -460,21 +563,18 @@ struct FileStatusView: View {
         defer { isLoading = false }
         do {
             gitStatus = try await GitStatusService.shared.status(for: repositoryURL)
+            recentCommits = await GitStatusService.shared.recentCommits(in: repositoryURL)
+
             if selectedFile == nil {
-                if let first = gitStatus.staged.first ?? changedFiles.first {
-                    selectedFile = first
-                    await loadDiff(for: first)
-                }
+                selectedFile = gitStatus.staged.first ?? changedFiles.first
             } else {
                 if let current = selectedFile,
-                   gitStatus.staged.contains(where: { $0.path == current.path }) ||
-                    changedFiles.contains(where: { $0.path == current.path }) {
-                    await loadDiff(for: current)
+                   let matched = gitStatus.staged.first(where: { $0.path == current.path }) ??
+                                 changedFiles.first(where: { $0.path == current.path }) {
+                    selectedFile = matched
                 } else {
                     selectedFile = gitStatus.staged.first ?? changedFiles.first
-                    if let file = selectedFile {
-                        await loadDiff(for: file)
-                    } else {
+                    if selectedFile == nil {
                         diffHunks = []
                     }
                 }
@@ -538,6 +638,66 @@ struct FileStatusView: View {
         guard !gitStatus.staged.isEmpty else { return }
         do {
             try await GitStatusService.shared.unstageAll(files: gitStatus.staged, in: repositoryURL)
+            await loadStatus()
+        } catch {
+            errorMessage = error.localizedDescription
+            showingError = true
+        }
+    }
+
+    private func showInFinder(file: StatusFile) {
+        let fileURL = repositoryURL.appendingPathComponent(file.path)
+        NSWorkspace.shared.selectFile(fileURL.path, inFileViewerRootedAtPath: "")
+    }
+
+    private func openFile(file: StatusFile) {
+        let fileURL = repositoryURL.appendingPathComponent(file.path)
+        NSWorkspace.shared.open(fileURL)
+    }
+
+    private func discard(file: StatusFile) async {
+        do {
+            try await GitStatusService.shared.discard(file: file, in: repositoryURL)
+            await loadStatus()
+        } catch {
+            errorMessage = error.localizedDescription
+            showingError = true
+        }
+    }
+
+    private func remove(file: StatusFile) async {
+        do {
+            try await GitStatusService.shared.remove(file: file, in: repositoryURL)
+            await loadStatus()
+        } catch {
+            errorMessage = error.localizedDescription
+            showingError = true
+        }
+    }
+
+    private func confirmIgnore(file: StatusFile, pattern: String) async {
+        do {
+            try await GitStatusService.shared.ignore(file: file, pattern: pattern, in: repositoryURL)
+            await loadStatus()
+        } catch {
+            errorMessage = error.localizedDescription
+            showingError = true
+        }
+    }
+
+    private func resolveConflict(file: StatusFile, using: GitStatusService.ConflictResolution) async {
+        do {
+            try await GitStatusService.shared.resolveConflict(file: file, in: repositoryURL, using: using)
+            await loadStatus()
+        } catch {
+            errorMessage = error.localizedDescription
+            showingError = true
+        }
+    }
+
+    private func resetToCommit(file: StatusFile, commit: String) async {
+        do {
+            try await GitStatusService.shared.resetToCommit(file: file, commit: commit, in: repositoryURL)
             await loadStatus()
         } catch {
             errorMessage = error.localizedDescription

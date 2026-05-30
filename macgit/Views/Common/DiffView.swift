@@ -88,7 +88,7 @@ struct HunkView: View {
                                 try await GitStatusService.shared.unstage(hunk: hunk, file: file!, in: repositoryURL!)
                             }
                         }
-                        .buttonStyle(GlassButtonStyle(tint: .accentColor, fontSize: 10))
+                        .buttonStyle(GlassButtonStyle(tint: .yellow, fontSize: 10))
                     } else {
                         Button("Stage") {
                             perform {

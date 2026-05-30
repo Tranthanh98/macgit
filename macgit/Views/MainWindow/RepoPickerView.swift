@@ -19,9 +19,12 @@ struct RepoPickerView: View {
         VStack(spacing: 24) {
             Spacer()
 
-            Image(systemName: "rectangle.stack.badge.person.crop")
-                .font(.system(size: 64))
-                .foregroundStyle(.secondary)
+            if let icon = NSApp.applicationIconImage {
+                Image(nsImage: icon)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 80, height: 80)
+            }
 
             Text("Welcome to MacGit")
                 .font(.largeTitle)
@@ -76,7 +79,7 @@ struct RepoPickerView: View {
                                             .lineLimit(1)
                                     }
                                     Spacer()
-                                    Text(repo.lastOpened, style: .relative)
+                                    Text(timeAgoString(from: repo.lastOpened))
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
@@ -108,6 +111,28 @@ struct RepoPickerView: View {
                 store.add(url)
                 onRepositoryOpened(url)
             })
+        }
+    }
+
+    private func timeAgoString(from date: Date) -> String {
+        let interval = Date().timeIntervalSince(date)
+        let minute: TimeInterval = 60
+        let hour: TimeInterval = 60 * minute
+        let day: TimeInterval = 24 * hour
+
+        if interval < minute {
+            return "just now"
+        } else if interval < hour {
+            let minutes = Int(interval / minute)
+            return "\(minutes) minute\(minutes == 1 ? "" : "s") ago"
+        } else if interval < day {
+            let hours = Int(interval / hour)
+            return "\(hours) hour\(hours == 1 ? "" : "s") ago"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            return formatter.string(from: date)
         }
     }
 
