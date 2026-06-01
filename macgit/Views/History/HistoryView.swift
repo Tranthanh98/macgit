@@ -9,7 +9,7 @@ struct HistoryView: View {
     let repositoryURL: URL
     
     @State private var commits: [Commit] = []
-    @State private var graphNodes: [GraphNode] = []
+    @State private var graphLayout: CommitGraphLayout? = nil
     @State private var selectedCommit: Commit? = nil
     @State private var fileChanges: [CommitFileChange] = []
     @State private var selectedFile: CommitFileChange? = nil
@@ -71,30 +71,38 @@ struct HistoryView: View {
     // MARK: - Top Panel
     
     private var graphWidth: CGFloat {
-        let maxLane = graphNodes.map(\.lane).max() ?? 0
-        return CGFloat(maxLane + 1) * 14 + 8
+        let maxLane = graphLayout?.laneCount ?? 1
+        return CGFloat(maxLane) * 14 + 8
     }
-    
+
     private var commitGraphList: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
                 ZStack(alignment: .topLeading) {
                     // Graph lines
-                    BranchGraphCanvas(nodes: graphNodes)
+                    if let layout = graphLayout {
+                        BranchGraphCanvas(
+                            nodes: layout.nodes,
+                            edges: layout.edges,
+                            laneCount: layout.laneCount
+                        )
                         .padding(.leading, 4)
-                    
+                    }
+
                     // Commit rows overlay
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(Array(graphNodes.enumerated()), id: \.element.id) { index, node in
-                            CommitRowView(node: node, graphWidth: graphWidth, isSelected: selectedCommit?.hash == node.commit.hash)
-                                .id(node.commit.hash)
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    selectedCommit = node.commit
-                                }
-                                .contextMenu {
-                                    commitContextMenu(for: node.commit)
-                                }
+                        if let layout = graphLayout {
+                            ForEach(Array(layout.nodes.enumerated()), id: \.element.id) { index, node in
+                                CommitRowView(node: node, graphWidth: graphWidth, isSelected: selectedCommit?.hash == node.commit.hash)
+                                    .id(node.commit.hash)
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        selectedCommit = node.commit
+                                    }
+                                    .contextMenu {
+                                        commitContextMenu(for: node.commit)
+                                    }
+                            }
                         }
                     }
                     .padding(.leading, 4)
@@ -249,7 +257,7 @@ struct HistoryView: View {
             )
             await MainActor.run {
                 commits = newCommits
-                graphNodes = CommitGraphLayoutEngine.layout(commits: newCommits)
+                graphLayout = CommitGraphLayoutEngine.layout(commits: newCommits)
                 if selectedCommit == nil, let first = newCommits.first {
                     selectedCommit = first
                 }

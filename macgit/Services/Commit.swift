@@ -28,15 +28,27 @@ struct Commit: Identifiable, Equatable {
     }
 }
 
-// MARK: - Graph Layout Node
+// MARK: - Graph Layout
 
 struct GraphNode: Identifiable {
     let id = UUID()
     let commit: Commit
-    var lane: Int = 0
-    var laneOut: [Int] = []      // lanes going down to children
-    var mergeSourceLanes: [Int] = [] // lanes merging into this node (for merge commits)
-    var isLaneEnd: Bool = false  // true if this commit ends a lane (no child continues it)
+    let lane: Int
+    let rowIndex: Int
+}
+
+struct GraphEdge {
+    let fromRow: Int
+    let fromLane: Int
+    let toRow: Int
+    let toLane: Int
+    let isMergeParent: Bool
+}
+
+struct CommitGraphLayout {
+    let nodes: [GraphNode]
+    let edges: [GraphEdge]
+    let laneCount: Int
 }
 
 // MARK: - Commit File Change

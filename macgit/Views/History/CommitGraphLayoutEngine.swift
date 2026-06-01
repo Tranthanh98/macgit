@@ -4,71 +4,92 @@
 //
 
 import Foundation
+import SwiftUI
 
-struct CommitGraphLayoutEngine {
-    static func layout(commits: [Commit]) -> [GraphNode] {
-        guard !commits.isEmpty else { return [] }
-        
-        var commitByHash: [String: Commit] = [:]
-        var childrenOf: [String: [String]] = [:]
-        
-        for commit in commits {
-            commitByHash[commit.hash] = commit
-            for parent in commit.parents {
-                childrenOf[parent, default: []].append(commit.hash)
-            }
+enum CommitGraphLayoutEngine {
+    /// Builds a lane/edge layout for commits assumed to be in reverse chronological
+    /// order (newest first). Each commit's parents are resolved by hash; parents that
+    /// are not present in `commits` (e.g. beyond `maxCount`) are dropped.
+    static func layout(commits: [Commit]) -> CommitGraphLayout {
+        struct PendingEdge {
+            let fromRow: Int
+            let fromLane: Int
+            let parentID: String
+            let isMergeParent: Bool
         }
-        
-        // Assign lanes top-to-bottom (newest first)
-        var commitLane: [String: Int] = [:]
-        var nextLane = 0
-        
-        for commit in commits {
-            let hash = commit.hash
-            let children = childrenOf[hash, default: []]
-            let placedChildren = children.filter { commitLane[$0] != nil }
-            let primaryChildren = placedChildren.filter {
-                commitByHash[$0]?.parents.first == hash
-            }
-            
-            if let primary = primaryChildren.sorted(by: {
-                commitLane[$0]! < commitLane[$1]!
-            }).first {
-                commitLane[hash] = commitLane[primary]!
-            } else if placedChildren.isEmpty {
-                commitLane[hash] = nextLane
-                nextLane += 1
-            } else {
-                // Secondary parent of a merge → new lane
-                commitLane[hash] = nextLane
-                nextLane += 1
-            }
-        }
-        
-        // Build GraphNodes
+
+        var activeLanes: [String?] = []           // per-lane: hash of expected next commit
         var nodes: [GraphNode] = []
-        for commit in commits {
-            let children = childrenOf[commit.hash, default: []]
-            let parentLanes = commit.parents.compactMap { commitLane[$0] }
-            let childLanes = children.compactMap { commitLane[$0] }
-            let currentLane = commitLane[commit.hash] ?? 0
-            
-            var mergeSources: [Int] = []
-            if parentLanes.count > 1 {
-                mergeSources = parentLanes.filter { $0 != currentLane }
+        var positions: [String: (lane: Int, row: Int)] = [:]
+        var pendingEdges: [PendingEdge] = []
+        var maxLaneSeen = 0
+
+        for (row, commit) in commits.enumerated() {
+            var claimedLane: Int?
+            for (idx, expected) in activeLanes.enumerated() where expected == commit.hash {
+                if claimedLane == nil {
+                    claimedLane = idx
+                } else {
+                    // Multiple lanes converge on this commit; clear the extras.
+                    activeLanes[idx] = nil
+                }
             }
-            
-            let node = GraphNode(
-                commit: commit,
-                lane: currentLane,
-                laneOut: childLanes,
-                mergeSourceLanes: mergeSources,
-                isLaneEnd: children.isEmpty
-            )
-            nodes.append(node)
+
+            let lane: Int
+            if let claimedLane {
+                lane = claimedLane
+            } else if let freeLane = activeLanes.firstIndex(of: nil) {
+                lane = freeLane
+            } else {
+                lane = activeLanes.count
+                activeLanes.append(nil)
+            }
+
+            let isMerge = commit.parents.count > 1
+            nodes.append(GraphNode(commit: commit, lane: lane, rowIndex: row))
+            positions[commit.hash] = (lane, row)
+            maxLaneSeen = max(maxLaneSeen, lane + 1)
+
+            if commit.parents.isEmpty {
+                activeLanes[lane] = nil
+            } else {
+                // First parent inherits this lane to keep the main line straight;
+                // extra parents (merges) spawn side lanes.
+                activeLanes[lane] = commit.parents[0]
+                pendingEdges.append(PendingEdge(fromRow: row, fromLane: lane, parentID: commit.parents[0], isMergeParent: false))
+
+                for parent in commit.parents.dropFirst() {
+                    let parentLane: Int
+                    if let freeLane = activeLanes.firstIndex(of: nil) {
+                        parentLane = freeLane
+                        activeLanes[freeLane] = parent
+                    } else {
+                        parentLane = activeLanes.count
+                        activeLanes.append(parent)
+                    }
+                    maxLaneSeen = max(maxLaneSeen, parentLane + 1)
+                    // fromLane is the child's lane so the edge visibly starts from
+                    // the merge node; toLane (the parent's lane) is resolved below.
+                    pendingEdges.append(PendingEdge(fromRow: row, fromLane: lane, parentID: parent, isMergeParent: true))
+                }
+            }
         }
-        
-        return nodes
+
+        // Edges are deferred until now because a parent may appear many rows
+        // later and we need its final (row, lane) to draw the connector.
+        var edges: [GraphEdge] = []
+        for pending in pendingEdges {
+            guard let parentPos = positions[pending.parentID] else { continue }
+            edges.append(GraphEdge(
+                fromRow: pending.fromRow,
+                fromLane: pending.fromLane,
+                toRow: parentPos.row,
+                toLane: parentPos.lane,
+                isMergeParent: pending.isMergeParent
+            ))
+        }
+
+        return CommitGraphLayout(nodes: nodes, edges: edges, laneCount: max(1, maxLaneSeen))
     }
 }
 
@@ -87,10 +108,8 @@ struct LaneColors {
         Color(nsColor: NSColor.systemIndigo),
         Color(nsColor: NSColor.systemBrown),
     ]
-    
+
     static func color(for lane: Int) -> Color {
         palette[lane % palette.count]
     }
 }
-
-import SwiftUI
