@@ -46,15 +46,11 @@ struct HistoryView: View {
                     detail: "Repository may be empty"
                 )
             } else {
-                VSplitView {
-                    // Top: commit graph list
-                    commitGraphList
-                        .frame(minHeight: 200)
-                    
-                    // Bottom: file changes + diff
-                    commitDetailPanel
-                        .frame(minHeight: 180)
-                }
+                PersistentVSplit(
+                    autosaveName: "HistoryMainSplit",
+                    top: { commitGraphList.frame(minHeight: 200) },
+                    bottom: { commitDetailPanel.frame(minHeight: 180) }
+                )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -113,7 +109,6 @@ struct HistoryView: View {
                                     dateWidth: dateColumnWidth,
                                     commitWidth: commitColumnWidth
                                 )
-                                    .id(node.commit.hash)
                                     .contentShape(Rectangle())
                                     .onTapGesture {
                                         selectedCommit = node.commit
@@ -128,6 +123,7 @@ struct HistoryView: View {
                 }
             }
         }
+        .id(showAllBranches)
     }
     
     // MARK: - Bottom Panel
@@ -139,15 +135,17 @@ struct HistoryView: View {
                     // Commit info header
                     commitInfoHeader(for: commit)
                     
-                    HSplitView {
-                        // File changes list
-                        CommitFileListView(changes: fileChanges, selectedFile: $selectedFile)
-                            .frame(minWidth: 220, idealWidth: 280, maxWidth: 400)
-                        
-                        // Diff viewer
-                        commitDiffViewer
-                            .frame(minWidth: 300)
-                    }
+                    PersistentHSplit(
+                        autosaveName: "HistoryDetailSplit",
+                        left: {
+                            CommitFileListView(changes: fileChanges, selectedFile: $selectedFile)
+                                .frame(minWidth: 220)
+                        },
+                        right: {
+                            commitDiffViewer
+                                .frame(minWidth: 300)
+                        }
+                    )
                 }
             } else {
                 EmptyStateView(

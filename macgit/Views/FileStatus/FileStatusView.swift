@@ -52,13 +52,11 @@ struct FileStatusView: View {
                 )
             } else {
                 VStack(spacing: 0) {
-                    HSplitView {
-                        fileListPanel
-                            .frame(minWidth: 220, idealWidth: 320, maxWidth: 500)
-
-                        diffPanel
-                            .frame(minWidth: 300)
-                    }
+                    PersistentHSplit(
+                        autosaveName: "FileStatusMainSplit",
+                        left: { fileListPanel.frame(minWidth: 220) },
+                        right: { diffPanel.frame(minWidth: 300) }
+                    )
 
                     commitBar
                 }

@@ -24,7 +24,7 @@ struct CommitRowView: View {
         HStack(spacing: 0) {
             // Fixed-width spacer so all commit messages align regardless of lane count
             Color.clear
-                .frame(width: graphWidth, height: 32)
+                .frame(width: graphWidth, height: 24)
                 .fixedSize()
 
             // Commit message
@@ -68,7 +68,7 @@ struct CommitRowView: View {
         }
         .padding(.leading, 8)
         .padding(.trailing, 16)
-        .frame(height: 32)
+        .frame(height: 24)
         .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
         .contentShape(Rectangle())
     }

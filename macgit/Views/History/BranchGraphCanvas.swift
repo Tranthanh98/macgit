@@ -10,7 +10,7 @@ struct BranchGraphCanvas: View {
     let edges: [GraphEdge]
     let laneCount: Int
 
-    let rowHeight: CGFloat = 32
+    let rowHeight: CGFloat = 24
     let laneWidth: CGFloat = 14
     let dotSize: CGFloat = 8
 
