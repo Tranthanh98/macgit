@@ -64,4 +64,33 @@ extension GitStatusService {
         return output.split(separator: "\n").map { String($0) }.filter { !$0.isEmpty }
     }
 
+    func branchSyncStatus(for branch: String, in repositoryURL: URL) async -> BranchSyncStatus? {
+        // Check if branch has an upstream
+        let upstream = await upstreamBranch(for: branch, in: repositoryURL)
+        guard let upstreamRef = upstream, !upstreamRef.isEmpty else {
+            return nil
+        }
+
+        // Count commits behind (upstream has commits local doesn't)
+        let behindOutput = (try? await runGit(
+            arguments: ["rev-list", "--count", "\(branch)..\(upstreamRef)"],
+            in: repositoryURL
+        ))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let behind = Int(behindOutput ?? "0") ?? 0
+
+        // Count commits ahead (local has commits upstream doesn't)
+        let aheadOutput = (try? await runGit(
+            arguments: ["rev-list", "--count", "\(upstreamRef)..\(branch)"],
+            in: repositoryURL
+        ))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ahead = Int(aheadOutput ?? "0") ?? 0
+
+        // If both are zero, return nil to hide the badge
+        if ahead == 0 && behind == 0 {
+            return nil
+        }
+
+        return BranchSyncStatus(ahead: ahead, behind: behind)
+    }
+
 }
