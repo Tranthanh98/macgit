@@ -25,6 +25,8 @@ struct MainWindowView: View {
     @State private var showingStashSheet = false
     @State private var showingCheckoutConfirmation = false
     @State private var branchToCheckout: String = ""
+    @State private var showingDetachedHeadConfirmation = false
+    @State private var tagToCheckout: String = ""
     @StateObject private var syncState = SyncState()
     @State private var repoIconName: String = "code-branch"
     @State private var remoteURLString: String = ""
@@ -35,9 +37,14 @@ struct MainWindowView: View {
             SidebarView(
                 repositoryURL: repositoryURL,
                 selection: $selectedItem,
-                onRequestCheckout: { branch in
-                    branchToCheckout = branch
-                    showingCheckoutConfirmation = true
+                onRequestCheckout: { ref in
+                    if case .tag = selectedItem {
+                        tagToCheckout = ref
+                        showingDetachedHeadConfirmation = true
+                    } else {
+                        branchToCheckout = ref
+                        showingCheckoutConfirmation = true
+                    }
                 }
             )
             .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
@@ -193,9 +200,19 @@ struct MainWindowView: View {
         .sheet(isPresented: $showingCheckoutConfirmation) {
             CheckoutConfirmationSheet(branchName: branchToCheckout) { stash in
                 Task {
-                    await performCheckout(branch: branchToCheckout, stash: stash)
+                    await performCheckout(ref: branchToCheckout, stash: stash)
                 }
             }
+        }
+        .alert("Confirm change working copy", isPresented: $showingDetachedHeadConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("OK") {
+                Task {
+                    await performTagCheckout(tag: tagToCheckout)
+                }
+            }
+        } message: {
+            Text("Are you sure you want to checkout '\(tagToCheckout)'?\n\nDoing so will make your working copy a 'detached HEAD', which means you won't be on a branch anymore. If you want to commit after this you'll probably want to either checkout a branch again, or create a new branch. Is this ok?")
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task {
@@ -268,18 +285,18 @@ struct MainWindowView: View {
         await syncState.performCommit(message: message, repositoryURL: repositoryURL)
     }
 
-    private func performCheckout(branch: String, stash: Bool) async {
+    private func performCheckout(ref: String, stash: Bool) async {
         do {
             if stash {
                 try await GitStatusService.shared.stash(
                     options: GitStatusService.StashOptions(
-                        message: "Stashed before switching to \(branch)",
+                        message: "Stashed before switching to \(ref)",
                         keepIndex: false
                     ),
                     in: repositoryURL
                 )
             }
-            try await GitStatusService.shared.checkoutCommit(branch, in: repositoryURL)
+            try await GitStatusService.shared.checkoutCommit(ref, in: repositoryURL)
             await syncState.refresh(repositoryURL: repositoryURL)
             NotificationCenter.default.post(
                 name: .repositoryDidChange,
@@ -289,6 +306,10 @@ struct MainWindowView: View {
         } catch {
             syncState.showError(error.localizedDescription)
         }
+    }
+
+    private func performTagCheckout(tag: String) async {
+        await performCheckout(ref: tag, stash: false)
     }
 
     private func openRemoteURL() {
