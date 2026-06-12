@@ -53,4 +53,16 @@ extension GitStatusService {
     func deleteRemoteBranch(remote: String, name: String, in repositoryURL: URL) async throws -> String {
         return try await runGit(arguments: ["push", remote, "--delete", name], in: repositoryURL)
     }
+
+    func tags(in repositoryURL: URL) async -> [String] {
+        let output = (try? await runGit(arguments: ["tag", "--list"], in: repositoryURL)) ?? ""
+        return output.split(separator: "\n").map { String($0) }.filter { !$0.isEmpty }
+    }
+
+    func tagCommitHash(tag: String, in repositoryURL: URL) async -> String? {
+        let output = (try? await runGit(arguments: ["rev-parse", "\(tag)^{commit}"], in: repositoryURL))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let output = output, !output.isEmpty else { return nil }
+        return output
+    }
 }
