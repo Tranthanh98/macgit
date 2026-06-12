@@ -46,7 +46,7 @@ struct RepoPickerView: View {
                     .frame(width: 80, height: 80)
             }
 
-            Text("Welcome to MacGit")
+            Text("Welcome to Commit+")
                 .font(.largeTitle)
                 .fontWeight(.semibold)
 
