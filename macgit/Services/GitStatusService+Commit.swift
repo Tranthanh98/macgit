@@ -74,9 +74,10 @@ extension GitStatusService {
         return parseCommitLog(output)
     }
 
-    func tipHash(for branch: String, in repositoryURL: URL) async -> String? {
-        let output = (try? await runGit(arguments: ["rev-parse", branch], in: repositoryURL))?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return output?.isEmpty == false ? output : nil
+    func tipHash(for ref: String, in repositoryURL: URL) async -> String? {
+        let output = (try? await runGit(arguments: ["rev-parse", "\(ref)^{commit}"], in: repositoryURL))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let output = output, !output.isEmpty else { return nil }
+        return output
     }
 
     func aheadBehindCount(in repositoryURL: URL) async -> (ahead: Int, behind: Int) {

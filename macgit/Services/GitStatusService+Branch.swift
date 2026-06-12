@@ -59,10 +59,4 @@ extension GitStatusService {
         return output.split(separator: "\n").map { String($0) }.filter { !$0.isEmpty }
     }
 
-    func tagCommitHash(tag: String, in repositoryURL: URL) async -> String? {
-        let output = (try? await runGit(arguments: ["rev-parse", "\(tag)^{commit}"], in: repositoryURL))?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let output = output, !output.isEmpty else { return nil }
-        return output
-    }
 }
