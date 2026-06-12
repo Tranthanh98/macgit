@@ -464,11 +464,21 @@ struct SidebarView: View {
         let tree = buildBranchTree(from: locals)
         let allFolders = collectFolderPaths(from: tree)
 
-        // Fetch sync status for each branch
+        // Fetch sync status for each branch in parallel
         var syncMap: [String: BranchSyncStatus] = [:]
-        for branch in locals {
-            if let status = await GitStatusService.shared.branchSyncStatus(for: branch, in: repositoryURL) {
-                syncMap[branch] = status
+        await withTaskGroup(of: (String, BranchSyncStatus)?.self) { group in
+            for branch in locals {
+                group.addTask {
+                    if let status = await GitStatusService.shared.branchSyncStatus(for: branch, in: repositoryURL) {
+                        return (branch, status)
+                    }
+                    return nil
+                }
+            }
+            for await result in group {
+                if let (branch, status) = result {
+                    syncMap[branch] = status
+                }
             }
         }
 
