@@ -5,6 +5,11 @@
 
 import Foundation
 
+struct BranchSyncStatus: Equatable {
+    let ahead: Int   // local commits not on remote
+    let behind: Int  // remote commits not on local
+}
+
 extension GitStatusService {
     func currentBranch(in repositoryURL: URL) async -> String? {
         let branch = (try? await runGit(arguments: ["branch", "--show-current"], in: repositoryURL))?
