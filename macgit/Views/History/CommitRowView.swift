@@ -27,23 +27,22 @@ struct CommitRowView: View {
                 .frame(width: graphWidth, height: 24)
                 .fixedSize()
 
-            // Commit message
-            Text(node.commit.message)
-                .font(.system(size: 12, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(width: messageWidth, alignment: .leading)
+            // Message + ref labels (share the message column width)
+            HStack(spacing: 4) {
+                Text(node.commit.message)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-            Spacer(minLength: 8)
-
-            // Ref labels
-            if !node.commit.refs.isEmpty {
-                HStack(spacing: 4) {
-                    ForEach(node.commit.refs.prefix(3), id: \.self) { ref in
-                        RefLabel(text: ref)
+                if !node.commit.refs.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(node.commit.refs.prefix(3), id: \.self) { ref in
+                            RefLabel(text: ref)
+                        }
                     }
                 }
             }
+            .frame(width: messageWidth, alignment: .leading)
 
             // Author
             Text(node.commit.author)
@@ -65,6 +64,10 @@ struct CommitRowView: View {
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
                 .frame(width: commitWidth, alignment: .trailing)
+
+            // Match the last resizer width in the header
+            Color.clear
+                .frame(width: 6, height: 24)
         }
         .padding(.leading, 8)
         .padding(.trailing, 16)

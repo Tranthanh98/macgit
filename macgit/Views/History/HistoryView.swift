@@ -16,10 +16,10 @@ struct HistoryView: View {
     @State private var selectedFile: CommitFileChange? = nil
     @State private var diffHunks: [DiffHunk] = []
     @State private var showAllBranches = true
-    @State private var messageColumnWidth: CGFloat = 200
-    @State private var authorColumnWidth: CGFloat = 120
-    @State private var dateColumnWidth: CGFloat = 80
-    @State private var commitColumnWidth: CGFloat = 70
+    @AppStorage("history.messageWidth") private var messageColumnWidth: Double = 200
+    @AppStorage("history.authorWidth") private var authorColumnWidth: Double = 120
+    @AppStorage("history.dateWidth") private var dateColumnWidth: Double = 80
+    @AppStorage("history.commitWidth") private var commitColumnWidth: Double = 70
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingError = false
@@ -33,12 +33,7 @@ struct HistoryView: View {
     var body: some View {
         VStack(spacing: 0) {
             BranchFilterBar(
-                showAllBranches: $showAllBranches,
-                graphWidth: graphWidth,
-                messageWidth: $messageColumnWidth,
-                authorWidth: $authorColumnWidth,
-                dateWidth: $dateColumnWidth,
-                commitWidth: $commitColumnWidth
+                showAllBranches: $showAllBranches
             ) {
                 Task { await loadHistory() }
             }
@@ -97,52 +92,153 @@ struct HistoryView: View {
         return CGFloat(maxLane) * 14 + 8
     }
 
-    private var commitGraphList: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical) {
-                ZStack(alignment: .topLeading) {
-                    // Graph lines
-                    if let layout = graphLayout {
-                        BranchGraphCanvas(
-                            nodes: layout.nodes,
-                            edges: layout.edges,
-                            laneCount: layout.laneCount
-                        )
-                        .padding(.leading, 4)
-                    }
+    private func commitListHeader(messageWidth: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Color.clear
+                .frame(width: graphWidth, height: 16)
+                .fixedSize()
 
-                    // Commit rows overlay
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        if let layout = graphLayout {
-                            ForEach(Array(layout.nodes.enumerated()), id: \.element.id) { index, node in
-                                CommitRowView(
-                                    node: node,
-                                    graphWidth: graphWidth,
-                                    isSelected: selectedCommit?.hash == node.commit.hash,
-                                    messageWidth: messageColumnWidth,
-                                    authorWidth: authorColumnWidth,
-                                    dateWidth: dateColumnWidth,
-                                    commitWidth: commitColumnWidth
-                                )
-                                    .id(node.commit.hash)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        selectedCommit = node.commit
+            Text("Message")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .frame(width: messageWidth, alignment: .leading)
+
+            ColumnResizer(
+                leftWidth: Binding(
+                    get: { CGFloat(messageColumnWidth) },
+                    set: { messageColumnWidth = Double($0) }
+                ),
+                rightWidth: Binding(
+                    get: { CGFloat(authorColumnWidth) },
+                    set: { authorColumnWidth = Double($0) }
+                )
+            )
+
+            Text("Author")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .frame(width: CGFloat(authorColumnWidth), alignment: .leading)
+
+            ColumnResizer(
+                leftWidth: Binding(
+                    get: { CGFloat(authorColumnWidth) },
+                    set: { authorColumnWidth = Double($0) }
+                ),
+                rightWidth: Binding(
+                    get: { CGFloat(dateColumnWidth) },
+                    set: { dateColumnWidth = Double($0) }
+                )
+            )
+
+            Text("Date")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .frame(width: CGFloat(dateColumnWidth), alignment: .trailing)
+
+            ColumnResizer(
+                leftWidth: Binding(
+                    get: { CGFloat(dateColumnWidth) },
+                    set: { dateColumnWidth = Double($0) }
+                ),
+                rightWidth: Binding(
+                    get: { CGFloat(commitColumnWidth) },
+                    set: { commitColumnWidth = Double($0) }
+                )
+            )
+
+            Text("Commit")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .frame(width: CGFloat(commitColumnWidth), alignment: .trailing)
+
+            ColumnResizer(
+                leftWidth: Binding(
+                    get: { CGFloat(commitColumnWidth) },
+                    set: { commitColumnWidth = Double($0) }
+                ),
+                rightWidth: Binding(
+                    get: { CGFloat(0) },
+                    set: { _ in }
+                )
+            )
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 16)
+        .frame(height: 20)
+        .background(.thinMaterial)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(.separator)
+                .frame(height: 0.5)
+        }
+    }
+
+    private var commitGraphList: some View {
+        GeometryReader { geometry in
+            let viewportWidth = geometry.size.width
+            let resizers: CGFloat = 4 * 6
+            let padding: CGFloat = 8 + 16
+            let fixedWidth = graphWidth + CGFloat(messageColumnWidth) + CGFloat(authorColumnWidth) + CGFloat(dateColumnWidth) + CGFloat(commitColumnWidth) + resizers + padding
+            let extraSpace = max(0, viewportWidth - fixedWidth)
+            let effectiveMessageWidth = CGFloat(messageColumnWidth) + extraSpace
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    commitListHeader(messageWidth: effectiveMessageWidth)
+
+                    ScrollViewReader { proxy in
+                        ScrollView(.vertical) {
+                            ZStack(alignment: .topLeading) {
+                                // Graph lines
+                                if let layout = graphLayout {
+                                    BranchGraphCanvas(
+                                        nodes: layout.nodes,
+                                        edges: layout.edges,
+                                        laneCount: layout.laneCount
+                                    )
+                                    .padding(.leading, 4)
+                                }
+
+                                // Commit rows overlay
+                                LazyVStack(alignment: .leading, spacing: 0) {
+                                    if let layout = graphLayout {
+                                        ForEach(Array(layout.nodes.enumerated()), id: \.element.id) { index, node in
+                                            CommitRowView(
+                                                node: node,
+                                                graphWidth: graphWidth,
+                                                isSelected: selectedCommit?.hash == node.commit.hash,
+                                                messageWidth: effectiveMessageWidth,
+                                                authorWidth: CGFloat(authorColumnWidth),
+                                                dateWidth: CGFloat(dateColumnWidth),
+                                                commitWidth: CGFloat(commitColumnWidth)
+                                            )
+                                            .id(node.commit.hash)
+                                            .contentShape(Rectangle())
+                                            .onTapGesture {
+                                                selectedCommit = node.commit
+                                            }
+                                            .contextMenu {
+                                                commitContextMenu(for: node.commit)
+                                            }
+                                        }
                                     }
-                                    .contextMenu {
-                                        commitContextMenu(for: node.commit)
-                                    }
+                                }
+                                .padding(.leading, 4)
+                            }
+                        }
+                        .onChange(of: scrollTarget) { _, target in
+                            guard let target else { return }
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                proxy.scrollTo(target, anchor: .center)
                             }
                         }
                     }
-                    .padding(.leading, 4)
                 }
-            }
-            .onChange(of: scrollTarget) { _, target in
-                guard let target else { return }
-                withAnimation(.easeOut(duration: 0.3)) {
-                    proxy.scrollTo(target, anchor: .center)
-                }
+                .frame(minWidth: viewportWidth)
             }
         }
         .id(showAllBranches)
