@@ -289,6 +289,11 @@ struct SidebarView: View {
                 .font(.system(size: 12))
                 .fontWeight(row.fullPath == currentBranch && !row.isFolder ? .bold : .regular)
                 .lineLimit(1)
+
+            Spacer()
+
+            // Sync badge
+            syncBadge(for: row.fullPath)
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
@@ -364,6 +369,38 @@ struct SidebarView: View {
                         NSPasteboard.general.setString(row.fullPath, forType: .string)
                     }
                 }
+        }
+    }
+
+    @ViewBuilder
+    private func syncBadge(for branch: String) -> some View {
+        if let status = branchSyncStatus[branch] {
+            HStack(spacing: 4) {
+                if status.ahead > 0 {
+                    HStack(spacing: 2) {
+                        Text("\(status.ahead)")
+                        Text("↑")
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.secondary)
+                    .cornerRadius(4)
+                }
+                if status.behind > 0 {
+                    HStack(spacing: 2) {
+                        Text("\(status.behind)")
+                        Text("↓")
+                    }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.secondary)
+                    .cornerRadius(4)
+                }
+            }
         }
     }
 
