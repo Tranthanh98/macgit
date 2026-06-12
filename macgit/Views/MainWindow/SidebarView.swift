@@ -191,7 +191,7 @@ struct SidebarView: View {
             Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
-                .padding(.trailing, 4)
+                .padding(.trailing, 8)
         }
         .contentShape(Rectangle())
         .onTapGesture {
