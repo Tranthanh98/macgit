@@ -71,19 +71,23 @@ extension GitStatusService {
             return nil
         }
 
-        // Count commits behind (upstream has commits local doesn't)
-        let behindOutput = (try? await runGit(
-            arguments: ["rev-list", "--count", "\(branch)..\(upstreamRef)"],
+        // Use a single symmetric-difference command to get both counts atomically
+        // Output format: "behind\tahead"
+        let output = (try? await runGit(
+            arguments: ["rev-list", "--count", "--left-right", "\(upstreamRef)...\(branch)"],
             in: repositoryURL
         ))?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let behind = Int(behindOutput ?? "0") ?? 0
 
-        // Count commits ahead (local has commits upstream doesn't)
-        let aheadOutput = (try? await runGit(
-            arguments: ["rev-list", "--count", "\(upstreamRef)..\(branch)"],
-            in: repositoryURL
-        ))?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let ahead = Int(aheadOutput ?? "0") ?? 0
+        guard let line = output, !line.isEmpty else {
+            return nil
+        }
+
+        let parts = line.split(separator: "\t").map { String($0) }
+        guard parts.count == 2,
+              let behind = Int(parts[0]),
+              let ahead = Int(parts[1]) else {
+            return nil
+        }
 
         // If both are zero, return nil to hide the badge
         if ahead == 0 && behind == 0 {
