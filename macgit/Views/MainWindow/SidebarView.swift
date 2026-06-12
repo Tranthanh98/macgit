@@ -293,7 +293,9 @@ struct SidebarView: View {
             Spacer()
 
             // Sync badge
-            syncBadge(for: row.fullPath)
+            if !row.isFolder {
+                syncBadge(for: row.fullPath)
+            }
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
