@@ -8,6 +8,8 @@ import SwiftUI
 struct HistoryView: View {
     let repositoryURL: URL
     let selectedBranch: String?
+    private static let historyPageSize = 120
+    private static let historyScrollSpaceName = "historyScroll"
     
     @State private var commits: [Commit] = []
     @State private var graphLayout: CommitGraphLayout? = nil
@@ -21,22 +23,26 @@ struct HistoryView: View {
     @AppStorage("history.dateWidth") private var dateColumnWidth: Double = 80
     @AppStorage("history.commitWidth") private var commitColumnWidth: Double = 70
     @State private var isLoading = false
+    @State private var isRefreshingHistory = false
+    @State private var refreshIndicatorTask: Task<Void, Never>? = nil
     @State private var errorMessage: String?
     @State private var showingError = false
     @State private var scrollTarget: String? = nil
+    @State private var rowFrames: [String: CGRect] = [:]
+    @State private var paging = HistoryPagingState(pageSize: HistoryView.historyPageSize)
     
     init(repositoryURL: URL, selectedBranch: String? = nil) {
         self.repositoryURL = repositoryURL
         self.selectedBranch = selectedBranch
+        self._showAllBranches = State(initialValue: selectedBranch == nil)
+        self._paging = State(initialValue: HistoryPagingState(pageSize: Self.historyPageSize))
     }
     
     var body: some View {
         VStack(spacing: 0) {
             BranchFilterBar(
                 showAllBranches: $showAllBranches
-            ) {
-                Task { await loadHistory() }
-            }
+            ) {}
             
             if isLoading && commits.isEmpty {
                 ProgressView("Loading history…")
@@ -48,22 +54,31 @@ struct HistoryView: View {
                     detail: "Repository may be empty"
                 )
             } else {
-                PersistentVSplit(
-                    autosaveName: "HistoryMainSplit",
-                    top: { commitGraphList.frame(minHeight: 200) },
-                    bottom: { commitDetailPanel.frame(minHeight: 180) }
-                )
+                ZStack(alignment: .top) {
+                    PersistentVSplit(
+                        autosaveName: "HistoryMainSplit",
+                        top: { commitGraphList.frame(minHeight: 200) },
+                        bottom: { commitDetailPanel.frame(minHeight: 180) }
+                    )
+
+                    if isRefreshingHistory {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                            Text("Loading branch history…")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(.top, 8)
+                    }
+                }
             }
         }
         .id("history")
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))
-        .task {
-            await loadHistory()
-            if let branch = selectedBranch {
-                await selectBranchTip(branch)
-            }
-        }
         .onChange(of: selectedCommit) { _, newCommit in
             Task {
                 await loadFileChanges(for: newCommit)
@@ -74,9 +89,8 @@ struct HistoryView: View {
                 await loadDiff(for: newFile, in: selectedCommit)
             }
         }
-        .task(id: selectedBranch) {
-            guard let branch = selectedBranch else { return }
-            await selectBranchTip(branch)
+        .task(id: historyLoadKey) {
+            await loadHistory(reset: true)
         }
         .alert("Error", isPresented: $showingError, actions: {
             Button("OK", role: .cancel) {}
@@ -217,23 +231,63 @@ struct HistoryView: View {
                                                 commitWidth: CGFloat(commitColumnWidth)
                                             )
                                             .id(node.commit.hash)
+                                            .background(
+                                                GeometryReader { geo in
+                                                    Color.clear.preference(
+                                                        key: CommitRowFramePreferenceKey.self,
+                                                        value: [node.commit.hash: geo.frame(in: .named(Self.historyScrollSpaceName))]
+                                                    )
+                                                }
+                                            )
                                             .contentShape(Rectangle())
                                             .onTapGesture {
                                                 selectedCommit = node.commit
+                                            }
+                                            .onAppear {
+                                                if index == layout.nodes.count - 1 {
+                                                    Task {
+                                                        await loadOlderHistoryIfNeeded()
+                                                    }
+                                                }
                                             }
                                             .contextMenu {
                                                 commitContextMenu(for: node.commit)
                                             }
                                         }
                                     }
+                                    if paging.isLoadingMore {
+                                        HStack {
+                                            Spacer()
+                                            ProgressView("Loading older commits…")
+                                                .font(.caption)
+                                                .padding(.vertical, 12)
+                                            Spacer()
+                                        }
+                                    }
                                 }
                                 .padding(.leading, 4)
                             }
                         }
-                        .onChange(of: scrollTarget) { _, target in
-                            guard let target else { return }
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                proxy.scrollTo(target, anchor: .center)
+                        .coordinateSpace(name: Self.historyScrollSpaceName)
+                        .onPreferenceChange(CommitRowFramePreferenceKey.self) { frames in
+                            rowFrames = frames
+                        }
+                        .task(id: scrollTarget) {
+                            guard let target = scrollTarget else { return }
+                            let viewportHeight = max(0, geometry.size.height - 20)
+                            var attempts = 0
+                            while rowFrames[target] == nil, attempts < 5 {
+                                attempts += 1
+                                await Task.yield()
+                            }
+                            if Self.shouldAutoCenterCommit(
+                                targetHash: target,
+                                rowFrames: rowFrames,
+                                viewportHeight: viewportHeight
+                            ) {
+                                withAnimation(.easeOut(duration: 0.3)) {
+                                    proxy.scrollTo(target, anchor: .center)
+                                }
                             }
                         }
                     }
@@ -381,44 +435,100 @@ struct HistoryView: View {
     }
     
     // MARK: - Data Loading
-    
-    private func loadHistory() async {
+
+    private func loadHistory(reset: Bool) async {
         isLoading = true
         defer { isLoading = false }
-        do {
-            let newCommits = await GitStatusService.shared.commitHistory(
-                allBranches: showAllBranches,
-                in: repositoryURL
-            )
+        if reset {
             await MainActor.run {
-                commits = newCommits
-                graphLayout = CommitGraphLayoutEngine.layout(commits: newCommits)
-                if selectedCommit == nil, let first = newCommits.first {
-                    selectedCommit = first
+                paging.reset()
+                scrollTarget = nil
+                rowFrames = [:]
+                cancelHistoryRefreshIndicator()
+                if commits.isEmpty {
+                    graphLayout = nil
+                    selectedCommit = nil
+                    fileChanges = []
+                    selectedFile = nil
+                    diffHunks = []
+                } else {
+                    scheduleHistoryRefreshIndicator()
                 }
             }
-        } catch {
-            await MainActor.run {
-                errorMessage = error.localizedDescription
-                showingError = true
+        }
+        let scope = Self.historyScope(selectedBranch: selectedBranch, showAllBranches: showAllBranches)
+        let skip = await MainActor.run { paging.loadedCount }
+        let newCommits: [Commit]
+        switch scope {
+        case .allBranches:
+            newCommits = await GitStatusService.shared.commitHistory(
+                allBranches: true,
+                limit: Self.historyPageSize,
+                skip: skip,
+                in: repositoryURL
+            )
+        case .currentBranch:
+            newCommits = await GitStatusService.shared.commitHistory(
+                allBranches: false,
+                limit: Self.historyPageSize,
+                skip: skip,
+                in: repositoryURL
+            )
+        case .ref(let ref):
+            newCommits = await GitStatusService.shared.commitHistory(
+                branch: ref,
+                limit: Self.historyPageSize,
+                skip: skip,
+                in: repositoryURL
+            )
+        }
+
+        let newSelectedCommit: Commit?
+        let newScrollTarget: String?
+        switch scope {
+        case .ref:
+            newSelectedCommit = newCommits.first
+            newScrollTarget = newCommits.first?.hash
+        case .allBranches:
+            if let selectedBranch,
+               let tipHash = await GitStatusService.shared.tipHash(for: selectedBranch, in: repositoryURL),
+               let tipCommit = newCommits.first(where: { $0.hash == tipHash }) {
+                newSelectedCommit = tipCommit
+                newScrollTarget = tipCommit.hash
+            } else {
+                newSelectedCommit = newCommits.first
+                newScrollTarget = newCommits.first?.hash
             }
+        case .currentBranch:
+            newSelectedCommit = newCommits.first
+            newScrollTarget = newCommits.first?.hash
+        }
+
+        await MainActor.run {
+            if reset || skip == 0 {
+                commits = newCommits
+            } else {
+                commits.append(contentsOf: newCommits)
+            }
+            graphLayout = CommitGraphLayoutEngine.layout(commits: commits)
+            if let newSelectedCommit {
+                selectedCommit = newSelectedCommit
+                if skip == 0 {
+                    scrollTarget = newScrollTarget
+                }
+            }
+            paging.finishLoadingMore(loaded: newCommits.count)
+            cancelHistoryRefreshIndicator()
         }
     }
 
-    private func selectBranchTip(_ branch: String) async {
-        // Wait up to 2 seconds for history to load if it hasn't yet
-        var attempts = 0
-        while graphLayout == nil && attempts < 40 {
-            try? await Task.sleep(nanoseconds: 50_000_000)
-            attempts += 1
+    private func loadOlderHistoryIfNeeded() async {
+        let shouldLoad = await MainActor.run {
+            guard !isLoading else { return false }
+            return paging.beginLoadingMore()
         }
-        guard let tipHash = await GitStatusService.shared.tipHash(for: branch, in: repositoryURL) else { return }
-        await MainActor.run {
-            if let node = graphLayout?.nodes.first(where: { $0.commit.hash == tipHash }) {
-                selectedCommit = node.commit
-                scrollTarget = node.commit.hash
-            }
-        }
+        guard shouldLoad else { return }
+        await loadHistory(reset: false)
     }
     
     private func loadFileChanges(for commit: Commit?) async {
@@ -477,5 +587,68 @@ struct HistoryView: View {
                 showingError = true
             }
         }
+    }
+
+    private var historyLoadKey: String {
+        let branchKey = selectedBranch ?? "__current__"
+        let scopeKey = showAllBranches ? "all" : "single"
+        return "\(branchKey)|\(scopeKey)"
+    }
+
+    enum HistoryScope {
+        case allBranches
+        case currentBranch
+        case ref(String)
+    }
+
+    static func historyScope(selectedBranch: String?, showAllBranches: Bool) -> HistoryScope {
+        guard !showAllBranches else { return .allBranches }
+        if let selectedBranch {
+            return .ref(selectedBranch)
+        }
+        return .currentBranch
+    }
+
+    static func shouldAutoCenterCommit(
+        targetHash: String,
+        rowFrames: [String: CGRect],
+        viewportHeight: CGFloat
+    ) -> Bool {
+        guard let frame = rowFrames[targetHash], viewportHeight > 0 else { return true }
+        return !isRowVisible(frame, viewportHeight: viewportHeight)
+    }
+
+    static func isRowVisible(_ frame: CGRect, viewportHeight: CGFloat) -> Bool {
+        frame.maxY > 0 && frame.minY < viewportHeight
+    }
+
+    @MainActor
+    private func scheduleHistoryRefreshIndicator() {
+        refreshIndicatorTask?.cancel()
+        isRefreshingHistory = false
+        refreshIndicatorTask = Task {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                if isLoading && !commits.isEmpty {
+                    isRefreshingHistory = true
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func cancelHistoryRefreshIndicator() {
+        refreshIndicatorTask?.cancel()
+        refreshIndicatorTask = nil
+        isRefreshingHistory = false
+    }
+}
+
+private struct CommitRowFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }

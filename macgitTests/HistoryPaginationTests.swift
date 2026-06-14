@@ -1,0 +1,136 @@
+import XCTest
+@testable import macgit
+
+final class HistoryPaginationTests: XCTestCase {
+    func testCommitHistoryPageSkipsOlderCommits() async throws {
+        let repoURL = try makeRepoWithLinearHistory(commitCount: 6)
+
+        let firstPage = await GitStatusService.shared.commitHistory(
+            branch: "main",
+            limit: 3,
+            skip: 0,
+            in: repoURL
+        )
+        let secondPage = await GitStatusService.shared.commitHistory(
+            branch: "main",
+            limit: 3,
+            skip: 3,
+            in: repoURL
+        )
+
+        XCTAssertEqual(firstPage.map(\.message), ["commit 6", "commit 5", "commit 4"])
+        XCTAssertEqual(secondPage.map(\.message), ["commit 3", "commit 2", "commit 1"])
+    }
+
+    func testBranchHistoryPageReturnsBranchTipFirst() async throws {
+        let repoURL = try makeRepoWithOlderFeatureBranchTip()
+
+        let featurePage = await GitStatusService.shared.commitHistory(
+            branch: "feature",
+            limit: 2,
+            skip: 0,
+            in: repoURL
+        )
+
+        XCTAssertEqual(featurePage.first?.message, "feature tip")
+    }
+
+    func testHistoryPagingStateTracksLoadedPages() {
+        var state = HistoryPagingState(pageSize: 100)
+        XCTAssertTrue(state.beginLoadingMore())
+        state.finishLoadingMore(loaded: 100)
+
+        XCTAssertEqual(state.loadedCount, 100)
+        XCTAssertTrue(state.hasMore)
+        XCTAssertFalse(state.isLoadingMore)
+
+        XCTAssertTrue(state.beginLoadingMore())
+        state.cancelLoadingMore()
+
+        XCTAssertFalse(state.isLoadingMore)
+
+        state.reset()
+        XCTAssertEqual(state.loadedCount, 0)
+        XCTAssertTrue(state.hasMore)
+        XCTAssertFalse(state.isLoadingMore)
+    }
+
+    // MARK: - Helpers
+
+    private func makeRepoWithLinearHistory(commitCount: Int) throws -> URL {
+        let repoURL = try makeTempRepo(named: "macgit-history-linear")
+        try runGit(["init", "-b", "main"], in: repoURL)
+        try configureGit(in: repoURL)
+
+        let fileURL = repoURL.appendingPathComponent("tracked.txt")
+        try "seed\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        try runGit(["add", "tracked.txt"], in: repoURL)
+        try runGit(["commit", "-m", "commit 0"], in: repoURL)
+
+        for index in 1...commitCount {
+            try "commit \(index)\n".write(to: fileURL, atomically: true, encoding: .utf8)
+            try runGit(["add", "tracked.txt"], in: repoURL)
+            try runGit(["commit", "-m", "commit \(index)"], in: repoURL)
+        }
+
+        return repoURL
+    }
+
+    private func makeRepoWithOlderFeatureBranchTip() throws -> URL {
+        let repoURL = try makeTempRepo(named: "macgit-history-feature-tip")
+        try runGit(["init", "-b", "main"], in: repoURL)
+        try configureGit(in: repoURL)
+
+        let fileURL = repoURL.appendingPathComponent("tracked.txt")
+        try "base\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        try runGit(["add", "tracked.txt"], in: repoURL)
+        try runGit(["commit", "-m", "base"], in: repoURL)
+
+        try runGit(["checkout", "-b", "feature"], in: repoURL)
+        try "feature tip\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        try runGit(["add", "tracked.txt"], in: repoURL)
+        try runGit(["commit", "-m", "feature tip"], in: repoURL)
+
+        try runGit(["checkout", "main"], in: repoURL)
+        for index in 1...3 {
+            try "main \(index)\n".write(to: fileURL, atomically: true, encoding: .utf8)
+            try runGit(["add", "tracked.txt"], in: repoURL)
+            try runGit(["commit", "-m", "main \(index)"], in: repoURL)
+        }
+
+        return repoURL
+    }
+
+    private func makeTempRepo(named prefix: String) throws -> URL {
+        let repoURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: repoURL, withIntermediateDirectories: true)
+        return repoURL
+    }
+
+    private func configureGit(in repositoryURL: URL) throws {
+        try runGit(["config", "user.name", "Mac Git Tests"], in: repositoryURL)
+        try runGit(["config", "user.email", "tests@example.com"], in: repositoryURL)
+    }
+
+    private func runGit(_ arguments: [String], in repositoryURL: URL) throws {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        task.arguments = arguments
+        task.currentDirectoryURL = repositoryURL
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        task.standardOutput = stdout
+        task.standardError = stderr
+
+        try task.run()
+        task.waitUntilExit()
+
+        if task.terminationStatus != 0 {
+            let outputData = stderr.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: outputData, encoding: .utf8) ?? "git failed"
+            XCTFail("git \(arguments.joined(separator: " ")) failed: \(output)")
+        }
+    }
+}

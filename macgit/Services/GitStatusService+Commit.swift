@@ -49,6 +49,10 @@ extension GitStatusService {
     // MARK: - Commit History
 
     func commitHistory(allBranches: Bool, in repositoryURL: URL) async -> [Commit] {
+        await commitHistory(allBranches: allBranches, limit: 500, skip: 0, in: repositoryURL)
+    }
+
+    func commitHistory(allBranches: Bool, limit: Int, skip: Int = 0, in repositoryURL: URL) async -> [Commit] {
         var arguments = ["log"]
         if allBranches {
             arguments.append("--all")
@@ -56,21 +60,33 @@ extension GitStatusService {
         arguments.append(contentsOf: [
             "--format=%H%x00%P%x00%s%x00%an%x00%ae%x00%ad%x00%D",
             "--date=iso-strict",
-            "-n", "500"
+            "--max-count", "\(limit)"
         ])
+        if skip > 0 {
+            arguments.append(contentsOf: ["--skip", "\(skip)"])
+        }
         let output = (try? await runGit(arguments: arguments, in: repositoryURL)) ?? ""
         return parseCommitLog(output)
     }
 
     func commitHistory(branch: String, in repositoryURL: URL) async -> [Commit] {
+        await commitHistory(branch: branch, limit: 500, skip: 0, in: repositoryURL)
+    }
+
+    func commitHistory(branch: String, limit: Int, skip: Int = 0, in repositoryURL: URL) async -> [Commit] {
         let arguments = [
             "log", branch,
             "--format=%H%x00%P%x00%s%x00%an%x00%ae%x00%ad%x00%D",
             "--date=iso-strict",
-            "-n", "500"
+            "--max-count", "\(limit)"
         ]
 
-        let output = (try? await runGit(arguments: arguments, in: repositoryURL)) ?? ""
+        var pagedArguments = arguments
+        if skip > 0 {
+            pagedArguments.append(contentsOf: ["--skip", "\(skip)"])
+        }
+
+        let output = (try? await runGit(arguments: pagedArguments, in: repositoryURL)) ?? ""
         return parseCommitLog(output)
     }
 

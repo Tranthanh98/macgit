@@ -39,10 +39,34 @@ struct BranchFilterBar: View {
 struct ColumnResizer: View {
     @Binding var leftWidth: CGFloat
     @Binding var rightWidth: CGFloat
-    @State private var initialLeft: CGFloat = 0
-    @State private var initialRight: CGFloat = 0
     /// Whether the right side is a real column (true) or empty space (false)
     private var hasRightColumn: Bool { rightWidth > 10 }
+
+    static func committedWidths(
+        initialLeft: CGFloat,
+        initialRight: CGFloat,
+        translation: CGFloat,
+        hasRightColumn: Bool
+    ) -> (left: CGFloat, right: CGFloat) {
+        let minimumWidth: CGFloat = 40
+
+        if hasRightColumn {
+            // Standard two-column resizer: space moves from right to left.
+            let maxExpand = initialRight - minimumWidth
+            let actualDelta = max(-(initialLeft - minimumWidth), min(translation, maxExpand))
+            return (
+                left: initialLeft + actualDelta,
+                right: initialRight - actualDelta
+            )
+        } else {
+            // Last resizer: only clamp left column minimum.
+            let actualDelta = max(-(initialLeft - minimumWidth), translation)
+            return (
+                left: initialLeft + actualDelta,
+                right: initialRight
+            )
+        }
+    }
 
     var body: some View {
         Rectangle()
@@ -59,27 +83,15 @@ struct ColumnResizer: View {
             }
             .gesture(
                 DragGesture(minimumDistance: 1)
-                    .onChanged { value in
-                        if initialLeft == 0 {
-                            initialLeft = leftWidth
-                            initialRight = rightWidth
-                        }
-                        let delta = value.translation.width
-                        if hasRightColumn {
-                            // Standard two-column resizer: space moves from right to left
-                            let maxExpand = initialRight - 40
-                            let actualDelta = max(-(initialLeft - 40), min(delta, maxExpand))
-                            leftWidth = initialLeft + actualDelta
-                            rightWidth = initialRight - actualDelta
-                        } else {
-                            // Last resizer: only clamp left column minimum
-                            let actualDelta = max(-(initialLeft - 40), delta)
-                            leftWidth = initialLeft + actualDelta
-                        }
-                    }
-                    .onEnded { _ in
-                        initialLeft = 0
-                        initialRight = 0
+                    .onEnded { value in
+                        let committedWidths = Self.committedWidths(
+                            initialLeft: leftWidth,
+                            initialRight: rightWidth,
+                            translation: value.translation.width,
+                            hasRightColumn: hasRightColumn
+                        )
+                        leftWidth = committedWidths.left
+                        rightWidth = committedWidths.right
                     }
             )
             .overlay(
