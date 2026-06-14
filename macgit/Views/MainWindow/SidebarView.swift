@@ -12,6 +12,7 @@ enum SidebarSelection: Hashable {
     case branch(String)
     case tag(String)
     case remoteBranch(String)
+    case stash(String)
 }
 
 enum SidebarItem: String, CaseIterable, Identifiable {
@@ -70,6 +71,8 @@ struct SidebarView: View {
     @Binding var selection: SidebarSelection?
     let onRequestCheckout: (String, Bool) -> Void
     let onRequestPullBranch: (String) -> Void
+    let onRequestApplyStash: (String) -> Void
+    let onRequestDeleteStash: (String) -> Void
 
     @State private var branchNodes: [BranchNode] = []
     @State private var currentBranch: String = ""
@@ -82,6 +85,8 @@ struct SidebarView: View {
     @State private var remoteNodes: [BranchNode] = []
     @State private var isLoadingRemotes = false
     @State private var expandedRemoteFolders: Set<String> = []
+    @State private var stashEntries: [StashEntry] = []
+    @State private var isLoadingStashes = false
 
     // Section expansion states
     @State private var sectionStates: SidebarSectionState = SidebarSectionState()
@@ -91,6 +96,22 @@ struct SidebarView: View {
     @State private var showingError = false
     @State private var branchToDelete: String?
     @State private var showingDeleteConfirmation = false
+
+    init(
+        repositoryURL: URL,
+        selection: Binding<SidebarSelection?>,
+        onRequestCheckout: @escaping (String, Bool) -> Void,
+        onRequestPullBranch: @escaping (String) -> Void,
+        onRequestApplyStash: @escaping (String) -> Void = { _ in },
+        onRequestDeleteStash: @escaping (String) -> Void = { _ in }
+    ) {
+        self.repositoryURL = repositoryURL
+        self._selection = selection
+        self.onRequestCheckout = onRequestCheckout
+        self.onRequestPullBranch = onRequestPullBranch
+        self.onRequestApplyStash = onRequestApplyStash
+        self.onRequestDeleteStash = onRequestDeleteStash
+    }
 
     var body: some View {
         List(selection: $selection) {
@@ -168,8 +189,30 @@ struct SidebarView: View {
                 sectionHeader(SidebarSection.remotes, isExpanded: sectionStates.remotesExpanded)
             }
 
+            // STASHES section
+            Section {
+                if sectionStates.stashesExpanded {
+                    if isLoadingStashes && stashEntries.isEmpty {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, 4)
+                    } else if stashEntries.isEmpty {
+                        Text("No stashes")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(stashEntries) { stash in
+                            stashRowView(for: stash)
+                        }
+                    }
+                }
+            } header: {
+                sectionHeader(SidebarSection.stashes, isExpanded: sectionStates.stashesExpanded)
+            }
+
             // Other placeholder sections
-            ForEach([SidebarSection.stashes, .submodules, .subtrees], id: \.self) { section in
+            ForEach([SidebarSection.submodules, .subtrees], id: \.self) { section in
                 Section(section.rawValue) {
                     Text("Coming soon")
                         .font(.caption)
@@ -184,12 +227,14 @@ struct SidebarView: View {
             await loadBranches()
             await loadTags()
             await loadRemotes()
+            await loadStashes()
         }
         .onReceive(NotificationCenter.default.publisher(for: .repositoryDidChange)) { _ in
             Task {
                 await loadBranches()
                 await loadTags()
                 await loadRemotes()
+                await loadStashes()
             }
         }
         .alert("Error", isPresented: $showingError) {
@@ -471,6 +516,41 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
+    private func stashRowView(for stash: StashEntry) -> some View {
+        let baseView = HStack(spacing: 4) {
+            Image(systemName: "tray")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .frame(width: 16, alignment: .center)
+
+            Text(stash.displayTitle)
+                .font(.system(size: 12))
+                .lineLimit(1)
+
+            Spacer()
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+
+        baseView
+            .tag(SidebarSelection.stash(stash.ref))
+            .onTapGesture {
+                selection = .stash(stash.ref)
+            }
+            .onTapGesture(count: 2) {
+                onRequestApplyStash(stash.ref)
+            }
+            .contextMenu {
+                Button("Apply stash") {
+                    onRequestApplyStash(stash.ref)
+                }
+                Button("Delete stash", role: .destructive) {
+                    onRequestDeleteStash(stash.ref)
+                }
+            }
+    }
+
+    @ViewBuilder
     private func syncBadge(for branch: String) -> some View {
         if let status = branchSyncStatus[branch] {
             HStack(spacing: 4) {
@@ -671,6 +751,15 @@ struct SidebarView: View {
             if expandedRemoteFolders.isEmpty {
                 expandedRemoteFolders = allFolders
             }
+        }
+    }
+
+    private func loadStashes() async {
+        isLoadingStashes = true
+        defer { isLoadingStashes = false }
+        let stashes = await GitStatusService.shared.stashes(in: repositoryURL)
+        await MainActor.run {
+            stashEntries = stashes
         }
     }
 

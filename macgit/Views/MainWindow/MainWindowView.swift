@@ -27,6 +27,8 @@ struct MainWindowView: View {
     @State private var branchToCheckout: String = ""
     @State private var showingDetachedHeadConfirmation = false
     @State private var tagToCheckout: String = ""
+    @State private var pendingStashRef: String?
+    @State private var pendingStashAction: StashAction?
     @StateObject private var syncState = SyncState()
     @State private var repoIconName: String = "code-branch"
     @State private var remoteURLString: String = ""
@@ -34,49 +36,7 @@ struct MainWindowView: View {
     @State private var pullPreselectedBranch: String? = nil
 
     var body: some View {
-        NavigationSplitView {
-            SidebarView(
-                repositoryURL: repositoryURL,
-                selection: $selectedItem,
-                onRequestCheckout: { ref, isTag in
-                    if isTag {
-                        tagToCheckout = ref
-                        showingDetachedHeadConfirmation = true
-                    } else {
-                        branchToCheckout = ref
-                        showingCheckoutConfirmation = true
-                    }
-                },
-                onRequestPullBranch: { branch in
-                    pullPreselectedBranch = branch
-                    showingPullSheet = true
-                }
-            )
-            .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
-        } detail: {
-            VStack(spacing: 0) {
-                Color(nsColor: .controlBackgroundColor)
-                    .frame(height: 1)
-                    .overlay(alignment: .bottom) {
-                        Rectangle()
-                            .fill(.separator)
-                            .frame(height: 0.5)
-                    }
-
-                Group {
-                    switch selectedItem {
-                    case .item(.fileStatus):
-                        FileStatusView(repositoryURL: repositoryURL, syncState: syncState)
-                    case .item(.history), .branch, .tag, .remoteBranch:
-                        HistoryView(repositoryURL: repositoryURL, selectedBranch: selectedBranchName)
-                    case .item(.search):
-                        SearchView(repositoryURL: repositoryURL)
-                    case .none:
-                        EmptyStateView(message: "Select an item from the sidebar")
-                    }
-                }
-            }
-        }
+        rootView
         .overlay(
             GeometryReader { geo in
                 Color.clear.preference(key: WindowWidthKey.self, value: geo.size.width)
@@ -85,48 +45,11 @@ struct MainWindowView: View {
         .onPreferenceChange(WindowWidthKey.self) { newWidth in
             windowWidth = newWidth
         }
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                leftToolbar
-            }
-
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 6) {
-                    Image(repoIconName)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 18, height: 18)
-                    Text(repositoryURL.lastPathComponent)
-                        .font(.headline)
-                }
-                .padding(.horizontal, 12)
-            }
-
-            ToolbarItem(placement: .automatic) {
-                toolbarButton(icon: "network", label: "Remote", disabled: remoteURLString.isEmpty, action: openRemoteURL)
-            }
-            ToolbarItem(placement: .automatic) {
-                toolbarButton(icon: "folder", label: "Finder", action: showInFinder)
-            }
-            ToolbarItem(placement: .automatic) {
-                toolbarButton(icon: "terminal", label: "Terminal", action: openTerminal)
-            }
-            ToolbarItem(placement: .automatic) {
-                toolbarButton(icon: "gear", label: "Settings", action: {})
-            }
-        }
+        .toolbar { toolbarContent }
         .navigationTitle("")
         .focusedValue(\.toolbarAction, toolbarActionBinding)
         .frame(minWidth: 900, minHeight: 600)
-        .task {
-            await syncState.refresh(repositoryURL: repositoryURL)
-            syncState.startBackgroundSync(repositoryURL: repositoryURL)
-            let remoteURLString = await GitStatusService.shared.remoteURL(remote: "origin", in: repositoryURL)
-            if !remoteURLString.isEmpty {
-                self.remoteURLString = remoteURLString
-                repoIconName = determineRepoIconName(from: remoteURLString)
-            }
-        }
+        .task { await performInitialLoad() }
         .onChange(of: selectedItem) { _, newItem in
             if case .branch(let name) = newItem {
                 selectedBranchName = name
@@ -156,55 +79,14 @@ struct MainWindowView: View {
         }, message: {
             Text(syncState.infoMessage ?? "")
         })
-        .sheet(isPresented: $showingCommitSheet) {
-            CommitSheetView { message in
-                Task {
-                    await commitFromToolbar(message: message)
-                }
-            }
-        }
-        .sheet(isPresented: $showingPullSheet) {
-            PullSheetView(repositoryURL: repositoryURL, preselectedBranch: pullPreselectedBranch) { remote, branch, options in
-                Task {
-                    await syncState.performPull(remote: remote, branch: branch, options: options, repositoryURL: repositoryURL)
-                }
-            }
-        }
-        .sheet(isPresented: $showingPushSheet) {
-            PushSheetView(repositoryURL: repositoryURL) { options in
-                Task {
-                    await syncState.performPush(options: options, repositoryURL: repositoryURL)
-                }
-            }
-        }
-        .sheet(isPresented: $showingFetchSheet) {
-            FetchSheetView(repositoryURL: repositoryURL) { options in
-                Task {
-                    await syncState.performFetch(options: options, repositoryURL: repositoryURL)
-                }
-            }
-        }
-        .sheet(isPresented: $showingBranchSheet) {
-            BranchSheetView(repositoryURL: repositoryURL) {
-                Task {
-                    await syncState.refresh(repositoryURL: repositoryURL)
-                }
-            }
-        }
-        .sheet(isPresented: $showingMergeSheet) {
-            MergeSheetView(repositoryURL: repositoryURL) { branch, message, options in
-                Task {
-                    await syncState.performMerge(branch: branch, options: options, repositoryURL: repositoryURL)
-                }
-            }
-        }
-        .sheet(isPresented: $showingStashSheet) {
-            StashSheetView { options in
-                Task {
-                    await syncState.performStash(options: options, repositoryURL: repositoryURL)
-                }
-            }
-        }
+        .sheet(isPresented: $showingCommitSheet) { commitSheet }
+        .sheet(isPresented: $showingPullSheet) { pullSheet }
+        .sheet(isPresented: $showingPushSheet) { pushSheet }
+        .sheet(isPresented: $showingFetchSheet) { fetchSheet }
+        .sheet(isPresented: $showingBranchSheet) { branchSheet }
+        .sheet(isPresented: $showingMergeSheet) { mergeSheet }
+        .sheet(isPresented: $showingStashSheet) { stashSheet }
+        .sheet(isPresented: stashActionSheetBinding) { stashActionSheet }
         .sheet(isPresented: $showingCheckoutConfirmation) {
             CheckoutConfirmationSheet(branchName: branchToCheckout) { stash in
                 Task {
@@ -226,6 +108,188 @@ struct MainWindowView: View {
             Task {
                 await syncState.refresh(repositoryURL: repositoryURL)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var rootView: some View {
+        NavigationSplitView {
+            sidebarPane
+        } detail: {
+            detailPane
+        }
+    }
+
+    private var sidebarPane: some View {
+        SidebarView(
+            repositoryURL: repositoryURL,
+            selection: $selectedItem,
+            onRequestCheckout: { ref, isTag in
+                if isTag {
+                    tagToCheckout = ref
+                    showingDetachedHeadConfirmation = true
+                } else {
+                    branchToCheckout = ref
+                    showingCheckoutConfirmation = true
+                }
+            },
+            onRequestPullBranch: { branch in
+                pullPreselectedBranch = branch
+                showingPullSheet = true
+            },
+            onRequestApplyStash: { ref in
+                requestStashAction(ref: ref, action: .apply)
+            },
+            onRequestDeleteStash: { ref in
+                requestStashAction(ref: ref, action: .delete)
+            }
+        )
+        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
+    }
+
+    @ViewBuilder
+    private var detailPane: some View {
+        VStack(spacing: 0) {
+            Color(nsColor: .controlBackgroundColor)
+                .frame(height: 1)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(.separator)
+                        .frame(height: 0.5)
+                }
+
+            switch selectedItem {
+            case .item(.fileStatus):
+                FileStatusView(repositoryURL: repositoryURL, syncState: syncState)
+            case .item(.history), .branch, .tag, .remoteBranch:
+                HistoryView(repositoryURL: repositoryURL, selectedBranch: selectedBranchName)
+            case .stash(let ref):
+                StashView(repositoryURL: repositoryURL, stashRef: ref)
+            case .item(.search):
+                SearchView(repositoryURL: repositoryURL)
+            case .none:
+                EmptyStateView(message: "Select an item from the sidebar")
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            leftToolbar
+        }
+
+        ToolbarItem(placement: .principal) {
+            HStack(spacing: 6) {
+                Image(repoIconName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 18, height: 18)
+                Text(repositoryURL.lastPathComponent)
+                    .font(.headline)
+            }
+            .padding(.horizontal, 12)
+        }
+
+        ToolbarItem(placement: .automatic) {
+            toolbarButton(icon: "network", label: "Remote", disabled: remoteURLString.isEmpty, action: openRemoteURL)
+        }
+        ToolbarItem(placement: .automatic) {
+            toolbarButton(icon: "folder", label: "Finder", action: showInFinder)
+        }
+        ToolbarItem(placement: .automatic) {
+            toolbarButton(icon: "terminal", label: "Terminal", action: openTerminal)
+        }
+        ToolbarItem(placement: .automatic) {
+            toolbarButton(icon: "gear", label: "Settings", action: {})
+        }
+    }
+
+    @ViewBuilder
+    private var commitSheet: some View {
+        CommitSheetView { message in
+            Task {
+                await commitFromToolbar(message: message)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var pullSheet: some View {
+        PullSheetView(repositoryURL: repositoryURL, preselectedBranch: pullPreselectedBranch) { remote, branch, options in
+            Task {
+                await syncState.performPull(remote: remote, branch: branch, options: options, repositoryURL: repositoryURL)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var pushSheet: some View {
+        PushSheetView(repositoryURL: repositoryURL) { options in
+            Task {
+                await syncState.performPush(options: options, repositoryURL: repositoryURL)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var fetchSheet: some View {
+        FetchSheetView(repositoryURL: repositoryURL) { options in
+            Task {
+                await syncState.performFetch(options: options, repositoryURL: repositoryURL)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var branchSheet: some View {
+        BranchSheetView(repositoryURL: repositoryURL) {
+            Task {
+                await syncState.refresh(repositoryURL: repositoryURL)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var mergeSheet: some View {
+        MergeSheetView(repositoryURL: repositoryURL) { branch, message, options in
+            Task {
+                await syncState.performMerge(branch: branch, options: options, repositoryURL: repositoryURL)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var stashSheet: some View {
+        StashSheetView { options in
+            Task {
+                await syncState.performStash(options: options, repositoryURL: repositoryURL)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var stashActionSheet: some View {
+        if let ref = pendingStashRef, let action = pendingStashAction {
+            StashActionConfirmationSheet(stashRef: ref, action: action) { deleteAfterApplying in
+                Task {
+                    await performStashAction(
+                        ref: ref,
+                        action: action,
+                        deleteAfterApplying: deleteAfterApplying
+                    )
+                }
+            }
+        }
+    }
+
+    private func performInitialLoad() async {
+        await syncState.refresh(repositoryURL: repositoryURL)
+        syncState.startBackgroundSync(repositoryURL: repositoryURL)
+        let remoteURLString = await GitStatusService.shared.remoteURL(remote: "origin", in: repositoryURL)
+        if !remoteURLString.isEmpty {
+            self.remoteURLString = remoteURLString
+            repoIconName = determineRepoIconName(from: remoteURLString)
         }
     }
 
@@ -320,6 +384,55 @@ struct MainWindowView: View {
 
     private func performTagCheckout(tag: String) async {
         await performCheckout(ref: tag, stash: false)
+    }
+
+    private func requestStashAction(ref: String, action: StashAction) {
+        pendingStashRef = ref
+        pendingStashAction = action
+    }
+
+    private var stashActionSheetBinding: Binding<Bool> {
+        Binding(
+            get: { pendingStashRef != nil && pendingStashAction != nil },
+            set: { isPresented in
+                if !isPresented {
+                    clearPendingStashAction()
+                }
+            }
+        )
+    }
+
+    @MainActor
+    private func clearPendingStashAction() {
+        pendingStashRef = nil
+        pendingStashAction = nil
+    }
+
+    private func performStashAction(ref: String, action: StashAction, deleteAfterApplying: Bool) async {
+        do {
+            switch action {
+            case .apply:
+                try await GitStatusService.shared.applyStash(
+                    ref: ref,
+                    dropAfterApplying: deleteAfterApplying,
+                    in: repositoryURL
+                )
+            case .delete:
+                try await GitStatusService.shared.dropStash(ref: ref, in: repositoryURL)
+            }
+            await syncState.refresh(repositoryURL: repositoryURL)
+            NotificationCenter.default.post(
+                name: .repositoryDidChange,
+                object: nil,
+                userInfo: ["repositoryURL": repositoryURL]
+            )
+        } catch {
+            syncState.showError(error.localizedDescription)
+        }
+
+        await MainActor.run {
+            clearPendingStashAction()
+        }
     }
 
     private func openRemoteURL() {

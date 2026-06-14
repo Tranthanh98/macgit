@@ -7,6 +7,11 @@ import Foundation
 
 extension GitStatusService {
     func diff(for file: String, in commit: String, in repositoryURL: URL) async -> [DiffHunk] {
+        if isStashRef(commit) {
+            let output = (try? await runGit(arguments: ["diff", "--no-color", "-U3", "\(commit)^1", commit, "--", file], in: repositoryURL)) ?? ""
+            return DiffParser.parse(output)
+        }
+
         let output = (try? await runGit(arguments: ["show", "--no-color", "-p", commit, "--", file], in: repositoryURL)) ?? ""
         // Strip the commit header; diff starts at "diff --git"
         guard let diffStart = output.range(of: "diff --git") else { return [] }
@@ -81,5 +86,9 @@ extension GitStatusService {
 
     func cherryPickCommit(_ commit: String, in repositoryURL: URL) async throws {
         _ = try await runGit(arguments: ["cherry-pick", commit], in: repositoryURL)
+    }
+
+    private func isStashRef(_ ref: String) -> Bool {
+        ref.hasPrefix("stash@{")
     }
 }
