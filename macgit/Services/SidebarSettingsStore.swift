@@ -8,7 +8,20 @@ import Foundation
 struct SidebarSectionState: Codable {
     var branchesExpanded: Bool = true
     var tagsExpanded: Bool = true
-    // Future sections: remotesExpanded, stashesExpanded, etc.
+    var remotesExpanded: Bool = true
+
+    init(branchesExpanded: Bool = true, tagsExpanded: Bool = true, remotesExpanded: Bool = true) {
+        self.branchesExpanded = branchesExpanded
+        self.tagsExpanded = tagsExpanded
+        self.remotesExpanded = remotesExpanded
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        branchesExpanded = try container.decodeIfPresent(Bool.self, forKey: .branchesExpanded) ?? true
+        tagsExpanded = try container.decodeIfPresent(Bool.self, forKey: .tagsExpanded) ?? true
+        remotesExpanded = try container.decodeIfPresent(Bool.self, forKey: .remotesExpanded) ?? true
+    }
 }
 
 final class SidebarSettingsStore {
@@ -37,6 +50,8 @@ final class SidebarSettingsStore {
             state.branchesExpanded.toggle()
         case .tags:
             state.tagsExpanded.toggle()
+        case .remotes:
+            state.remotesExpanded.toggle()
         default:
             break
         }

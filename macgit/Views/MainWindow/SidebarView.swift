@@ -11,6 +11,7 @@ enum SidebarSelection: Hashable {
     case item(SidebarItem)
     case branch(String)
     case tag(String)
+    case remoteBranch(String)
 }
 
 enum SidebarItem: String, CaseIterable, Identifiable {
@@ -78,6 +79,9 @@ struct SidebarView: View {
     @State private var tagNodes: [BranchNode] = []
     @State private var isLoadingTags = false
     @State private var expandedTagFolders: Set<String> = []
+    @State private var remoteNodes: [BranchNode] = []
+    @State private var isLoadingRemotes = false
+    @State private var expandedRemoteFolders: Set<String> = []
 
     // Section expansion states
     @State private var sectionStates: SidebarSectionState = SidebarSectionState()
@@ -142,8 +146,30 @@ struct SidebarView: View {
                 sectionHeader(SidebarSection.tags, isExpanded: sectionStates.tagsExpanded)
             }
 
+            // REMOTES section
+            Section {
+                if sectionStates.remotesExpanded {
+                    if isLoadingRemotes && remoteNodes.isEmpty {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, 4)
+                    } else if remoteNodes.isEmpty {
+                        Text("No remotes")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(visibleRemoteRows) { row in
+                            remoteRowView(for: row)
+                        }
+                    }
+                }
+            } header: {
+                sectionHeader(SidebarSection.remotes, isExpanded: sectionStates.remotesExpanded)
+            }
+
             // Other placeholder sections
-            ForEach(SidebarSection.allCases.dropFirst(3), id: \.self) { section in
+            ForEach([SidebarSection.stashes, .submodules, .subtrees], id: \.self) { section in
                 Section(section.rawValue) {
                     Text("Coming soon")
                         .font(.caption)
@@ -157,11 +183,13 @@ struct SidebarView: View {
             loadSectionStates()
             await loadBranches()
             await loadTags()
+            await loadRemotes()
         }
         .onReceive(NotificationCenter.default.publisher(for: .repositoryDidChange)) { _ in
             Task {
                 await loadBranches()
                 await loadTags()
+                await loadRemotes()
             }
         }
         .alert("Error", isPresented: $showingError) {
@@ -251,6 +279,26 @@ struct SidebarView: View {
             }
         }
         traverse(tagNodes, indent: 0)
+        return rows
+    }
+
+    private var visibleRemoteRows: [BranchRowItem] {
+        var rows: [BranchRowItem] = []
+        func traverse(_ nodes: [BranchNode], indent: Int) {
+            for node in nodes {
+                rows.append(BranchRowItem(
+                    id: node.id,
+                    name: node.name,
+                    fullPath: node.fullPath,
+                    isFolder: node.isFolder,
+                    indent: indent
+                ))
+                if node.isFolder && expandedRemoteFolders.contains(node.fullPath) {
+                    traverse(node.children, indent: indent + 1)
+                }
+            }
+        }
+        traverse(remoteNodes, indent: 0)
         return rows
     }
 
@@ -376,6 +424,53 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
+    private func remoteRowView(for row: BranchRowItem) -> some View {
+        let baseView = HStack(spacing: 4) {
+            HStack(spacing: 0) {
+                ForEach(0..<row.indent, id: \.self) { _ in
+                    Color.clear
+                        .frame(width: 16)
+                }
+            }
+
+            if row.isFolder {
+                Image(systemName: expandedRemoteFolders.contains(row.fullPath) ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 16, alignment: .center)
+            } else {
+                Color.clear
+                    .frame(width: 16)
+            }
+
+            Text(row.name)
+                .font(.system(size: 12))
+                .lineLimit(1)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+
+        if row.isFolder {
+            baseView
+                .onTapGesture {
+                    toggleRemoteFolder(row.fullPath)
+                }
+        } else {
+            baseView
+                .tag(SidebarSelection.remoteBranch(row.fullPath))
+                .onTapGesture {
+                    selection = .remoteBranch(row.fullPath)
+                }
+                .contextMenu {
+                    Button("Copy Branch Name to Clipboard") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(row.fullPath, forType: .string)
+                    }
+                }
+        }
+    }
+
+    @ViewBuilder
     private func syncBadge(for branch: String) -> some View {
         if let status = branchSyncStatus[branch] {
             HStack(spacing: 4) {
@@ -420,6 +515,14 @@ struct SidebarView: View {
             expandedTagFolders.remove(path)
         } else {
             expandedTagFolders.insert(path)
+        }
+    }
+
+    private func toggleRemoteFolder(_ path: String) {
+        if expandedRemoteFolders.contains(path) {
+            expandedRemoteFolders.remove(path)
+        } else {
+            expandedRemoteFolders.insert(path)
         }
     }
 
@@ -503,7 +606,7 @@ struct SidebarView: View {
         defer { isLoadingBranches = false }
         let locals = await GitStatusService.shared.localBranches(in: repositoryURL)
         let current = await GitStatusService.shared.currentBranch(in: repositoryURL) ?? ""
-        let tree = buildBranchTree(from: locals)
+        let tree = SidebarTreeBuilder.buildTree(from: locals)
         let allFolders = collectFolderPaths(from: tree)
 
         // Fetch sync status for each branch in parallel
@@ -543,7 +646,7 @@ struct SidebarView: View {
         isLoadingTags = true
         defer { isLoadingTags = false }
         let tags = await GitStatusService.shared.tags(in: repositoryURL)
-        let tree = buildBranchTree(from: tags)
+        let tree = SidebarTreeBuilder.buildTree(from: tags)
         let allFolders = collectFolderPaths(from: tree)
         await MainActor.run {
             tagNodes = tree
@@ -553,45 +656,25 @@ struct SidebarView: View {
         }
     }
 
-    // MARK: - Tree Builder
-
-    private func buildBranchTree(from branches: [String], prefix: String = "") -> [BranchNode] {
-        var groups = [String: [String]]()
-        var leaves = Set<String>()
-
-        for branch in branches {
-            let relative = prefix.isEmpty ? branch : String(branch.dropFirst(prefix.count + 1))
-            if let slashIndex = relative.firstIndex(of: "/") {
-                let first = String(relative[..<slashIndex])
-                let rest = String(relative[relative.index(after: slashIndex)...])
-                let childBranch = prefix.isEmpty ? branch : "\(prefix)/\(rest)"
-                groups[first, default: []].append(childBranch)
-            } else {
-                leaves.insert(relative)
+    private func loadRemotes() async {
+        isLoadingRemotes = true
+        defer { isLoadingRemotes = false }
+        let remotes = await GitStatusService.shared.remotes(in: repositoryURL)
+        var branchesByRemote: [String: [String]] = [:]
+        for remote in remotes {
+            branchesByRemote[remote] = await GitStatusService.shared.remoteBranches(remote: remote, in: repositoryURL)
+        }
+        let tree = SidebarTreeBuilder.buildRemoteTree(remoteBranchesByRemote: branchesByRemote)
+        let allFolders = collectFolderPaths(from: tree)
+        await MainActor.run {
+            remoteNodes = tree
+            if expandedRemoteFolders.isEmpty {
+                expandedRemoteFolders = allFolders
             }
         }
-
-        var nodes: [BranchNode] = []
-
-        for (name, childBranches) in groups.sorted(by: { $0.key < $1.key }) {
-            let fullPath = prefix.isEmpty ? name : "\(prefix)/\(name)"
-            var children = buildBranchTree(from: childBranches, prefix: fullPath)
-            if leaves.remove(name) != nil {
-                children.insert(
-                    BranchNode(name: name, fullPath: fullPath, isFolder: false, children: []),
-                    at: 0
-                )
-            }
-            nodes.append(BranchNode(name: name, fullPath: fullPath, isFolder: true, children: children))
-        }
-
-        for leaf in leaves.sorted() {
-            let fullPath = prefix.isEmpty ? leaf : "\(prefix)/\(leaf)"
-            nodes.append(BranchNode(name: leaf, fullPath: fullPath, isFolder: false, children: []))
-        }
-
-        return nodes
     }
+
+    // MARK: - Tree Builder
 
     private func collectFolderPaths(from nodes: [BranchNode]) -> Set<String> {
         var paths = Set<String>()
