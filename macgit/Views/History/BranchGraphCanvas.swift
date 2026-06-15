@@ -20,10 +20,7 @@ struct BranchGraphCanvas: View {
 
             // 1. Draw edges (lines / curves)
             for edge in edges {
-                let y1 = CGFloat(edge.fromRow) * rowHeight + rowHeight / 2
-                let x1 = CGFloat(edge.fromLane) * laneWidth + laneWidth / 2
-                let y2 = CGFloat(edge.toRow) * rowHeight + rowHeight / 2
-                let x2 = CGFloat(edge.toLane) * laneWidth + laneWidth / 2
+                let route = Self.edgeRoute(for: edge, rowHeight: rowHeight, laneWidth: laneWidth)
 
                 let color: Color
                 if edge.fromLane == edge.toLane {
@@ -35,67 +32,20 @@ struct BranchGraphCanvas: View {
                 }
 
                 var path = Path()
-                path.move(to: CGPoint(x: x1, y: y1))
-
+                path.move(to: route.start)
                 if edge.fromLane == edge.toLane {
-                    // Straight vertical line
-                    path.addLine(to: CGPoint(x: x2, y: y2))
+                    path.addLine(to: route.end)
                 } else {
-                    // Curved connector
-                    let dy = y2 - y1
-                    let ady = abs(dy)
-                    let minStraight = rowHeight * 0.5
-                    let curveSpan = rowHeight * 0.6
-
-                    if ady > curveSpan + minStraight * 2 {
-                        if !edge.isMergeParent {
-                            // First-parent: straight down in child's lane, curve into parent at the bottom
-                            let straightEndY = y2 - (dy > 0 ? curveSpan : -curveSpan)
-                            path.addLine(to: CGPoint(x: x1, y: straightEndY))
-
-                            let cp1 = CGPoint(
-                                x: x1,
-                                y: straightEndY + (dy > 0 ? curveSpan * 0.35 : -curveSpan * 0.35)
-                            )
-                            let cp2 = CGPoint(
-                                x: x2,
-                                y: y2 + (dy > 0 ? -curveSpan * 0.35 : curveSpan * 0.35)
-                            )
-                            path.addCurve(to: CGPoint(x: x2, y: y2), control1: cp1, control2: cp2)
-                        } else {
-                            // Merge source: curve near child, then straight down in parent's lane
-                            let straightStartY = y1 + (dy > 0 ? curveSpan : -curveSpan)
-                            let cp1 = CGPoint(
-                                x: x1,
-                                y: y1 + (dy > 0 ? curveSpan * 0.35 : -curveSpan * 0.35)
-                            )
-                            let cp2 = CGPoint(
-                                x: x2,
-                                y: straightStartY + (dy > 0 ? -curveSpan * 0.35 : curveSpan * 0.35)
-                            )
-                            path.addCurve(
-                                to: CGPoint(x: x2, y: straightStartY),
-                                control1: cp1,
-                                control2: cp2
-                            )
-                            path.addLine(to: CGPoint(x: x2, y: y2))
-                        }
-                    } else {
-                        // Short descent: wide bezier with vertical pull
-                        let tension = max(abs(x2 - x1) * 0.5, ady * 0.35, rowHeight * 0.6)
-                        let cp1 = CGPoint(
-                            x: x1,
-                            y: y1 + (dy > 0 ? min(tension, ady * 0.45) : -min(tension, ady * 0.45))
-                        )
-                        let cp2 = CGPoint(
-                            x: x2,
-                            y: y2 + (dy > 0 ? -min(tension, ady * 0.45) : min(tension, ady * 0.45))
-                        )
-                        path.addCurve(to: CGPoint(x: x2, y: y2), control1: cp1, control2: cp2)
-                    }
+                    path.addLine(to: route.preTurn)
+                    path.addQuadCurve(to: route.postTurn, control: route.corner)
+                    path.addLine(to: route.end)
                 }
 
-                context.stroke(path, with: .color(color), lineWidth: 2.2)
+                context.stroke(
+                    path,
+                    with: .color(color),
+                    style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round)
+                )
             }
 
             // 2. Draw dots on top
@@ -130,5 +80,45 @@ struct BranchGraphCanvas: View {
 
     private var graphWidth: CGFloat {
         return CGFloat(laneCount) * laneWidth + 8
+    }
+
+    struct EdgeRoute {
+        let start: CGPoint
+        let preTurn: CGPoint
+        let corner: CGPoint
+        let postTurn: CGPoint
+        let end: CGPoint
+    }
+
+    static func edgeRoute(for edge: GraphEdge, rowHeight: CGFloat, laneWidth: CGFloat) -> EdgeRoute {
+        let y1 = CGFloat(edge.fromRow) * rowHeight + rowHeight / 2
+        let x1 = CGFloat(edge.fromLane) * laneWidth + laneWidth / 2
+        let y2 = CGFloat(edge.toRow) * rowHeight + rowHeight / 2
+        let x2 = CGFloat(edge.toLane) * laneWidth + laneWidth / 2
+
+        let start = CGPoint(x: x1, y: y1)
+        let end = CGPoint(x: x2, y: y2)
+
+        guard edge.fromLane != edge.toLane else {
+            return EdgeRoute(start: start, preTurn: start, corner: start, postTurn: end, end: end)
+        }
+
+        let cornerRadius = min(4, min(abs(x2 - x1) / 2, abs(y2 - y1) / 2))
+
+        if edge.isMergeParent {
+            let xDirection = x2 >= x1 ? 1 as CGFloat : -1 as CGFloat
+            let yDirection = y2 >= y1 ? 1 as CGFloat : -1 as CGFloat
+            let preTurn = CGPoint(x: x2 - xDirection * cornerRadius, y: y1)
+            let corner = CGPoint(x: x2, y: y1)
+            let postTurn = CGPoint(x: x2, y: y1 + yDirection * cornerRadius)
+            return EdgeRoute(start: start, preTurn: preTurn, corner: corner, postTurn: postTurn, end: end)
+        } else {
+            let xDirection = x2 >= x1 ? 1 as CGFloat : -1 as CGFloat
+            let yDirection = y2 >= y1 ? 1 as CGFloat : -1 as CGFloat
+            let preTurn = CGPoint(x: x1, y: y2 - yDirection * cornerRadius)
+            let corner = CGPoint(x: x1, y: y2)
+            let postTurn = CGPoint(x: x1 + xDirection * cornerRadius, y: y2)
+            return EdgeRoute(start: start, preTurn: preTurn, corner: corner, postTurn: postTurn, end: end)
+        }
     }
 }

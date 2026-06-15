@@ -45,7 +45,6 @@ enum CommitGraphLayoutEngine {
                 activeLanes.append(nil)
             }
 
-            let isMerge = commit.parents.count > 1
             nodes.append(GraphNode(commit: commit, lane: lane, rowIndex: row))
             positions[commit.hash] = (lane, row)
             maxLaneSeen = max(maxLaneSeen, lane + 1)
@@ -60,7 +59,9 @@ enum CommitGraphLayoutEngine {
 
                 for parent in commit.parents.dropFirst() {
                     let parentLane: Int
-                    if let freeLane = activeLanes.firstIndex(of: nil) {
+                    if let existingLane = activeLanes.firstIndex(of: parent) {
+                        parentLane = existingLane
+                    } else if let freeLane = activeLanes.firstIndex(of: nil) {
                         parentLane = freeLane
                         activeLanes[freeLane] = parent
                     } else {

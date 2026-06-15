@@ -139,4 +139,30 @@ final class CommitGraphLayoutEngineTests: XCTestCase {
             $0.fromRow == 1 && $0.toRow == 2 && $0.fromLane == 1 && $0.toLane == 0 && !$0.isMergeParent
         })
     }
+
+    func testMergeParentReusesAlreadyActiveLane() {
+        // Newest → oldest:
+        // A -> D
+        // B merges C and D, where D is already being tracked by lane 0.
+        //
+        // The merge parent should reuse the existing lane for D instead of
+        // allocating a third lane.
+        let d = makeCommit(hash: "d")
+        let c = makeCommit(hash: "c")
+        let b = makeCommit(hash: "b", parents: ["c", "d"])
+        let a = makeCommit(hash: "a", parents: ["d"])
+
+        let layout = CommitGraphLayoutEngine.layout(commits: [a, b, c, d])
+        let lanes = laneMap(layout.nodes)
+
+        XCTAssertEqual(layout.laneCount, 2)
+        XCTAssertEqual(lanes["a"], 0)
+        XCTAssertEqual(lanes["b"], 1)
+        XCTAssertEqual(lanes["c"], 1)
+        XCTAssertEqual(lanes["d"], 0)
+
+        XCTAssertTrue(layout.edges.contains {
+            $0.fromRow == 1 && $0.toRow == 3 && $0.fromLane == 1 && $0.toLane == 0 && $0.isMergeParent
+        })
+    }
 }
