@@ -34,6 +34,7 @@ struct MainWindowView: View {
     @State private var remoteURLString: String = ""
     @State private var selectedBranchName: String? = nil
     @State private var pullPreselectedBranch: String? = nil
+    @State private var showingSearchModal = false
 
     var body: some View {
         rootView
@@ -117,6 +118,28 @@ struct MainWindowView: View {
             sidebarPane
         } detail: {
             detailPane
+        }
+        .overlay {
+            if showingSearchModal {
+                ZStack {
+                    Color.black.opacity(0.15)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            showingSearchModal = false
+                        }
+
+                    SearchModalView(
+                        repositoryURL: repositoryURL,
+                        onDismiss: { showingSearchModal = false },
+                        onSelect: { action in
+                            handleSearchAction(action)
+                            showingSearchModal = false
+                        }
+                    )
+                    .padding(.top, 80)
+                }
+                .transition(.opacity)
+            }
         }
     }
 
@@ -524,6 +547,33 @@ struct MainWindowView: View {
             if !syncing && syncState.stashableCount > 0 {
                 showingStashSheet = true
             }
+        case .search:
+            showingSearchModal = true
+        }
+    }
+
+    private func handleSearchAction(_ action: SearchAction) {
+        switch action {
+        case .showCommit(let hash):
+            selectedItem = .item(.history)
+            selectedBranchName = hash
+        case .showFile(_):
+            selectedItem = .item(.fileStatus)
+        case .checkoutBranch(let branch):
+            if branch.hasPrefix("remotes/") {
+                let localName = branch.replacingOccurrences(of: "remotes/", with: "")
+                if let slashIndex = localName.firstIndex(of: "/") {
+                    let branchName = String(localName[localName.index(after: slashIndex)...])
+                    branchToCheckout = branchName
+                    showingCheckoutConfirmation = true
+                }
+            } else {
+                branchToCheckout = branch
+                showingCheckoutConfirmation = true
+            }
+        case .showTag(let tag):
+            tagToCheckout = tag
+            showingDetachedHeadConfirmation = true
         }
     }
 }

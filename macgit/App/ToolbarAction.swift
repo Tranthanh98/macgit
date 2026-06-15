@@ -6,7 +6,7 @@
 import SwiftUI
 
 enum ToolbarAction: Hashable {
-    case commit, pull, push, fetch, branch, merge, stash
+    case commit, pull, push, fetch, branch, merge, stash, search
 }
 
 struct ToolbarActionKey: FocusedValueKey {

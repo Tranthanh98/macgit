@@ -1,8 +1,3 @@
-//
-//  SearchView.swift
-//  macgit
-//
-
 import SwiftUI
 
 struct SearchView: View {
@@ -11,8 +6,8 @@ struct SearchView: View {
     var body: some View {
         EmptyStateView(
             icon: "magnifyingglass",
-            message: "Search across commits, files, and branches",
-            detail: repositoryURL.path
+            message: "Quick Search",
+            detail: "Press ⌘⇧F to search across commits, files, branches, and tags"
         )
     }
 }

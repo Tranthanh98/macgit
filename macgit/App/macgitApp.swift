@@ -98,6 +98,14 @@ struct macgitApp: App {
                 }
                 .disabled(action == nil)
                 .keyboardShortcut("s", modifiers: [.command, .shift])
+
+                Divider()
+
+                Button("Search...") {
+                    action = .search
+                }
+                .disabled(action == nil)
+                .keyboardShortcut("f", modifiers: [.command, .shift])
             }
         }
     }
