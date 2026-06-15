@@ -79,7 +79,7 @@ struct RepositorySettingsDraft: Equatable {
     }
 
     private static func resolveRemote(savedRemoteName: String?, remotes: [String]) -> String {
-        if let savedRemoteName, remotes.contains(savedRemoteName) {
+        if let savedRemoteName {
             return savedRemoteName
         }
         return remotes.first ?? ""

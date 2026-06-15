@@ -2,6 +2,25 @@ import XCTest
 @testable import macgit
 
 final class RepositorySettingsDraftTests: XCTestCase {
+    func testDraftPreservesSavedRemoteWhenRemotesAreUnavailable() {
+        let draft = RepositorySettingsDraft(
+            settings: RepoSettings(
+                defaultRemoteName: "origin",
+                defaultPullBranch: "main",
+                pullStrategy: .merge,
+                autoFetchEnabled: false,
+                refreshOnAppActive: true,
+                confirmDetachedHeadCheckout: true,
+                confirmDestructiveStashActions: true
+            ),
+            remotes: [],
+            branches: ["main"],
+            currentBranch: "main"
+        )
+
+        XCTAssertEqual(draft.selectedRemoteName, "origin")
+    }
+
     func testDraftPrefersSavedBranchWhenItExistsInDetectedBranches() {
         let settings = RepoSettings(
             defaultRemoteName: "origin",
@@ -24,6 +43,27 @@ final class RepositorySettingsDraftTests: XCTestCase {
         XCTAssertEqual(draft.selectedBranchMode, .detected)
         XCTAssertEqual(draft.selectedDetectedBranch, "release")
         XCTAssertEqual(draft.manualBranchName, "")
+    }
+
+    func testDraftUsesCurrentBranchWhenSavedBranchIsManualAndDetectedBranchIsAvailable() {
+        let draft = RepositorySettingsDraft(
+            settings: RepoSettings(
+                defaultRemoteName: "origin",
+                defaultPullBranch: "release/hotfix",
+                pullStrategy: .merge,
+                autoFetchEnabled: false,
+                refreshOnAppActive: true,
+                confirmDetachedHeadCheckout: true,
+                confirmDestructiveStashActions: true
+            ),
+            remotes: ["origin"],
+            branches: ["main", "develop"],
+            currentBranch: "main"
+        )
+
+        XCTAssertEqual(draft.selectedBranchMode, .manual)
+        XCTAssertEqual(draft.selectedDetectedBranch, "main")
+        XCTAssertEqual(draft.manualBranchName, "release/hotfix")
     }
 
     func testDraftFallsBackToManualBranchEntryWhenSavedBranchIsCustom() {
