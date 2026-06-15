@@ -48,10 +48,10 @@ struct RepoSettings: Codable, Equatable {
         confirmDestructiveStashActions = try container.decodeIfPresent(Bool.self, forKey: .confirmDestructiveStashActions) ?? true
     }
 
-    static func defaults(currentBranch: String, remotes: [String]) -> RepoSettings {
+    static func defaults(currentBranch: String?, remotes: [String]) -> RepoSettings {
         RepoSettings(
             defaultRemoteName: remotes.first,
-            defaultPullBranch: currentBranch
+            defaultPullBranch: currentBranch ?? ""
         )
     }
 }

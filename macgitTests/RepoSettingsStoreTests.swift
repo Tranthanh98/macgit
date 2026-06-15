@@ -18,7 +18,11 @@ final class RepoSettingsStoreTests: XCTestCase {
 
     func testRepoSettingsStorePersistsSettingsPerRepositoryPath() {
         let defaultsKey = "test.repo-settings.\(UUID().uuidString)"
-        let store = RepoSettingsStore(userDefaults: UserDefaults.standard, key: defaultsKey)
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: defaultsKey)
+        defer { defaults.removeObject(forKey: defaultsKey) }
+
+        let store = RepoSettingsStore(userDefaults: defaults, key: defaultsKey)
         let repoA = "/tmp/repo-a-\(UUID().uuidString)"
         let repoB = "/tmp/repo-b-\(UUID().uuidString)"
 
@@ -27,12 +31,17 @@ final class RepoSettingsStoreTests: XCTestCase {
         repoASettings.autoFetchEnabled = true
         store.update(for: repoA, settings: repoASettings)
 
-        let loadedA = store.settings(for: repoA, currentBranch: "main", remotes: ["origin"])
-        let loadedB = store.settings(for: repoB, currentBranch: "develop", remotes: ["upstream"])
+        let freshStore = RepoSettingsStore(userDefaults: defaults, key: defaultsKey)
+        let loadedA = freshStore.settings(for: repoA, currentBranch: "main", remotes: ["origin"])
+        let loadedB = freshStore.settings(for: repoB, currentBranch: nil, remotes: ["upstream"])
 
-        XCTAssertEqual(loadedA.pullStrategy, .rebase)
-        XCTAssertTrue(loadedA.autoFetchEnabled)
+        XCTAssertEqual(loadedA, repoASettings)
         XCTAssertEqual(loadedB.defaultRemoteName, "upstream")
-        XCTAssertEqual(loadedB.defaultPullBranch, "develop")
+        XCTAssertEqual(loadedB.defaultPullBranch, "")
+        XCTAssertEqual(loadedB.pullStrategy, .merge)
+        XCTAssertFalse(loadedB.autoFetchEnabled)
+        XCTAssertTrue(loadedB.refreshOnAppActive)
+        XCTAssertTrue(loadedB.confirmDetachedHeadCheckout)
+        XCTAssertTrue(loadedB.confirmDestructiveStashActions)
     }
 }

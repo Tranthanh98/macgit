@@ -23,7 +23,7 @@ final class RepoSettingsStore {
         }
     }
 
-    func settings(for repositoryPath: String, currentBranch: String, remotes: [String]) -> RepoSettings {
+    func settings(for repositoryPath: String, currentBranch: String?, remotes: [String]) -> RepoSettings {
         settings[repositoryPath] ?? RepoSettings.defaults(currentBranch: currentBranch, remotes: remotes)
     }
 
