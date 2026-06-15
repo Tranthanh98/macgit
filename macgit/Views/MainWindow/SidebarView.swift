@@ -126,6 +126,8 @@ struct SidebarView: View {
                 ForEach(SidebarSection.workspace.items) { item in
                     if item == .search {
                         Label(item.rawValue, systemImage: item.icon)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                             .onTapGesture {
                                 onRequestSearch()
                             }
