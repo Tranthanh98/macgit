@@ -20,12 +20,28 @@ func determineRepoIconName(from remoteURLString: String) -> String {
     }
 }
 
+struct RepoPickerRowState {
+    var currentBranch: String?
+    var isMissing: Bool
+    var isLoading: Bool
+}
+
+enum RepoPickerSortOption: String, CaseIterable, Identifiable {
+    case lastOpened = "Last Opened"
+    case name = "Name"
+
+    var id: String { rawValue }
+}
+
 struct RepoPickerView: View {
     @ObservedObject private var store = RecentRepositoriesStore.shared
     @State private var showingCloneSheet = false
     @State private var errorMessage: String?
     @State private var showingError = false
+    @State private var searchText = ""
+    @State private var sortOption: RepoPickerSortOption = .lastOpened
     @State private var repoIcons: [URL: String] = [:]
+    @State private var rowStates: [URL: RepoPickerRowState] = [:]
 
     var showCloneSheetInitially: Bool
     var onRepositoryOpened: (URL) -> Void
@@ -35,102 +51,24 @@ struct RepoPickerView: View {
         self.onRepositoryOpened = onRepositoryOpened
     }
 
+    private var visibleRepositories: [RecentRepository] {
+        Self.visibleRepositories(
+            from: store.repositories,
+            searchText: searchText,
+            sortOption: sortOption,
+            rowStates: rowStates
+        )
+    }
+
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            if let icon = NSApp.applicationIconImage {
-                Image(nsImage: icon)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 80, height: 80)
-            }
-
-            Text("Welcome to Commit+")
-                .font(.largeTitle)
-                .fontWeight(.semibold)
-
-            Text("Open an existing repository or clone a new one")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 16) {
-                Button(action: openExistingRepository) {
-                    Label("Open Existing Repository", systemImage: "folder")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .frame(width: 220)
-
-                Button(action: { showingCloneSheet = true }) {
-                    Label("Clone New Repository", systemImage: "arrow.down.circle")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .frame(width: 220)
-            }
-
-            if !store.repositories.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recent")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 4)
-
-                    List {
-                        ForEach(store.repositories) { repo in
-                            Button(action: {
-                                store.add(repo.url)
-                                onRepositoryOpened(repo.url)
-                            }) {
-                                HStack {
-                                    Image(repoIcons[repo.url] ?? "code-branch")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(width: 18, height: 18)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(repo.name)
-                                            .font(.body)
-                                        Text(repo.url.path)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(1)
-                                    }
-                                    Spacer()
-                                    Text(timeAgoString(from: repo.lastOpened))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding(.vertical, 4)
-                            }
-                            .buttonStyle(.plain)
-                            .task(id: repo.url) {
-                                let remoteURLString = await GitStatusService.shared.remoteURL(remote: "origin", in: repo.url)
-                                if !remoteURLString.isEmpty {
-                                    repoIcons[repo.url] = determineRepoIconName(from: remoteURLString)
-                                } else {
-                                    repoIcons[repo.url] = "code-branch"
-                                }
-                            }
-                        }
-                        .onDelete(perform: store.remove(at:))
-                    }
-                    .listStyle(.plain)
-                    .frame(height: min(CGFloat(store.repositories.count) * 56 + 8, 280))
-                    .background(Color(nsColor: .controlBackgroundColor))
-                    .cornerRadius(16)
-                }
-                .frame(maxWidth: 460)
-            }
-
-            Spacer()
+        VStack(spacing: 18) {
+            headerSection
+            controlBar
+            recentRepositoriesSection
+            Spacer(minLength: 0)
         }
-        .frame(minWidth: 560, minHeight: 480)
-        .padding(40)
+        .frame(minWidth: 700, minHeight: 520, alignment: .top)
+        .padding(24)
         .task(id: showCloneSheetInitially) {
             if showCloneSheetInitially {
                 showingCloneSheet = true
@@ -146,6 +84,255 @@ struct RepoPickerView: View {
                 store.add(url)
                 onRepositoryOpened(url)
             })
+        }
+    }
+
+    static func visibleRepositories(
+        from repositories: [RecentRepository],
+        searchText: String,
+        sortOption: RepoPickerSortOption,
+        rowStates: [URL: RepoPickerRowState]
+    ) -> [RecentRepository] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered = repositories.filter { repo in
+            guard !query.isEmpty else { return true }
+
+            let haystack = [
+                repo.name,
+                repo.url.path,
+                rowStates[repo.url]?.currentBranch ?? ""
+            ]
+                .joined(separator: " ")
+                .lowercased()
+
+            return haystack.contains(query)
+        }
+
+        switch sortOption {
+        case .lastOpened:
+            return filtered.sorted { $0.lastOpened > $1.lastOpened }
+        case .name:
+            return filtered.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        }
+    }
+
+    private var headerSection: some View {
+        VStack(spacing: 18) {
+            HStack(alignment: .top, spacing: 16) {
+                if let icon = NSApp.applicationIconImage {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 56, height: 56)
+                        .padding(10)
+                        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Welcome to Commit+")
+                        .font(.largeTitle)
+                        .fontWeight(.semibold)
+                    Text("Open an existing repository or clone a new one")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            HStack(spacing: 12) {
+                Button(action: openExistingRepository) {
+                    Label("Open Repository", systemImage: "folder")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .frame(width: 200)
+
+                Button(action: { showingCloneSheet = true }) {
+                    Label("Clone Repository", systemImage: "arrow.down.circle")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .frame(width: 200)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    private var controlBar: some View {
+        HStack(spacing: 12) {
+            TextField("Filter repositories", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .disabled(store.repositories.isEmpty)
+
+            Menu {
+                Picker("Sort", selection: $sortOption) {
+                    ForEach(RepoPickerSortOption.allCases) { option in
+                        Text(option.rawValue).tag(option)
+                    }
+                }
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+                    .frame(width: 28, height: 28)
+            }
+            .menuStyle(.borderlessButton)
+            .disabled(store.repositories.isEmpty)
+        }
+    }
+
+    private var recentRepositoriesSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Recent Repositories")
+                .font(.headline)
+
+            if store.repositories.isEmpty {
+                ContentUnavailableView(
+                    "No Recent Repositories",
+                    systemImage: "clock.arrow.circlepath",
+                    description: Text("Open or clone a repository to start building your recent list.")
+                )
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 180)
+            } else if visibleRepositories.isEmpty {
+                ContentUnavailableView(
+                    "No Repositories Found",
+                    systemImage: "magnifyingglass",
+                    description: Text("Try a different search or clear the filter.")
+                )
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 180)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(visibleRepositories.enumerated()), id: \.element.id) { index, repo in
+                            repoRow(repo)
+
+                            if index < visibleRepositories.count - 1 {
+                                Divider()
+                                    .padding(.leading, 52)
+                            }
+                        }
+                    }
+                }
+                .frame(maxHeight: 320)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private func repoRow(_ repo: RecentRepository) -> some View {
+        Button(action: {
+            store.add(repo.url)
+            onRepositoryOpened(repo.url)
+        }) {
+            repoRowContent(repo)
+        }
+        .buttonStyle(.plain)
+        .task(id: repo.url) {
+            await loadRowPresentation(for: repo)
+        }
+        .contextMenu {
+            Button("Remove from Recents", role: .destructive) {
+                store.remove(repo)
+            }
+        }
+    }
+
+    private func repoRowContent(_ repo: RecentRepository) -> some View {
+        HStack(spacing: 12) {
+            Image(repoIcons[repo.url] ?? "code-branch")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 18, height: 18)
+                .frame(width: 34, height: 34)
+                .background(Color(nsColor: .windowBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(repo.name)
+                    .font(.body.weight(.medium))
+                Text(repo.url.path)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 6) {
+                rowStatusView(for: repo)
+                Text(timeAgoString(from: repo.lastOpened))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private func rowStatusView(for repo: RecentRepository) -> some View {
+        let rowState = rowStates[repo.url]
+
+        if rowState?.isLoading == true {
+            ProgressView()
+                .controlSize(.small)
+        } else if rowState?.isMissing == true {
+            Text("Repository moved or deleted")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.orange, in: Capsule())
+        } else if let branch = rowState?.currentBranch, !branch.isEmpty {
+            Text(branch)
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.quaternary, in: Capsule())
+        }
+    }
+
+    private func loadRowPresentation(for repo: RecentRepository) async {
+        await MainActor.run {
+            rowStates[repo.url] = RepoPickerRowState(
+                currentBranch: rowStates[repo.url]?.currentBranch,
+                isMissing: false,
+                isLoading: true
+            )
+        }
+
+        let repoPath = repo.url.path
+        let gitMetadataPath = repo.url.appendingPathComponent(".git").path
+        let exists = FileManager.default.fileExists(atPath: repoPath)
+        let hasGitMetadata = FileManager.default.fileExists(atPath: gitMetadataPath)
+
+        guard exists && hasGitMetadata else {
+            await MainActor.run {
+                repoIcons[repo.url] = "code-branch"
+                rowStates[repo.url] = RepoPickerRowState(currentBranch: nil, isMissing: true, isLoading: false)
+            }
+            return
+        }
+
+        async let branch = GitStatusService.shared.currentBranch(in: repo.url)
+        async let remoteURLString = GitStatusService.shared.remoteURL(remote: "origin", in: repo.url)
+        let (currentBranch, remoteURL) = await (branch, remoteURLString)
+
+        await MainActor.run {
+            repoIcons[repo.url] = remoteURL.isEmpty ? "code-branch" : determineRepoIconName(from: remoteURL)
+            rowStates[repo.url] = RepoPickerRowState(
+                currentBranch: currentBranch,
+                isMissing: false,
+                isLoading: false
+            )
         }
     }
 
