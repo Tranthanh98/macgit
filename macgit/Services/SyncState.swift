@@ -28,6 +28,7 @@ class SyncState: ObservableObject {
     @Published var isFetching: Bool = false
     @Published var isMerging: Bool = false
     @Published var isStashing: Bool = false
+    @Published var activeSyncBranch: String? = nil
 
     var isAnySyncing: Bool {
         isCommitting || isPushing || isPulling || isFetching || isMerging || isStashing
@@ -97,8 +98,16 @@ class SyncState: ObservableObject {
     func performPush(options: GitStatusService.PushOptions, repositoryURL: URL) async {
         if await checkConflicts(repositoryURL: repositoryURL) { return }
         await MainActor.run { isPushing = true }
-        defer { Task { @MainActor in isPushing = false } }
+        defer {
+            Task { @MainActor in
+                isPushing = false
+                activeSyncBranch = nil
+            }
+        }
         do {
+            await MainActor.run {
+                activeSyncBranch = options.branches.count == 1 ? options.branches.first : nil
+            }
             let output = try await GitStatusService.shared.push(options: options, in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
             notifyRepositoryChanged(repositoryURL)
@@ -116,9 +125,45 @@ class SyncState: ObservableObject {
     func performPull(remote: String, branch: String, options: GitStatusService.PullOptions, repositoryURL: URL) async {
         if await checkConflicts(repositoryURL: repositoryURL) { return }
         await MainActor.run { isPulling = true }
-        defer { Task { @MainActor in isPulling = false } }
+        defer {
+            Task { @MainActor in
+                isPulling = false
+                activeSyncBranch = nil
+            }
+        }
         do {
+            await MainActor.run { activeSyncBranch = branch }
             let output = try await GitStatusService.shared.pull(remote: remote, branch: branch, options: options, in: repositoryURL)
+            await refresh(repositoryURL: repositoryURL)
+            notifyRepositoryChanged(repositoryURL)
+            let trimmed = output.lowercased()
+            if trimmed.contains("already up to date") || trimmed.contains("already up-to-date") {
+                showInfo("Already up to date.")
+            } else {
+                showInfo("Pull completed successfully.")
+            }
+        } catch {
+            let message = error.localizedDescription
+            if message.uppercased().contains("CONFLICT") {
+                showConflict("Merge conflicts occurred during Pull. Please resolve them in the File status view.")
+            } else {
+                showError(message)
+            }
+        }
+    }
+
+    func performPullBranch(branch: String, repositoryURL: URL) async {
+        if await checkConflicts(repositoryURL: repositoryURL) { return }
+        await MainActor.run { isPulling = true }
+        defer {
+            Task { @MainActor in
+                isPulling = false
+                activeSyncBranch = nil
+            }
+        }
+        do {
+            await MainActor.run { activeSyncBranch = branch }
+            let output = try await GitStatusService.shared.pullBranchFromUpstream(branch: branch, in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
             notifyRepositoryChanged(repositoryURL)
             let trimmed = output.lowercased()

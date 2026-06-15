@@ -20,12 +20,66 @@ final class BranchSyncStatusTests: XCTestCase {
         XCTAssertTrue(true)
     }
 
-    func testBranchSyncStatusForMainBranch() async {
-        let repoURL = URL(fileURLWithPath: "/Users/thanhtran/Project/macgit")
+    func testBranchSyncStatusReportsAheadAndBehindCountsForTrackedBranch() async throws {
+        let repoURL = try makeRepoWithTrackedBranch(aheadCommits: 1)
+
         let status = await GitStatusService.shared.branchSyncStatus(for: "main", in: repoURL)
-        // In the current repo, main is ahead of origin/main by 9 commits
-        XCTAssertNotNil(status)
-        XCTAssertEqual(status?.ahead, 9)
-        XCTAssertEqual(status?.behind, 0)
+
+        XCTAssertEqual(status, BranchSyncStatus(ahead: 1, behind: 0))
+    }
+
+    // MARK: - Helpers
+
+    private func makeRepoWithTrackedBranch(aheadCommits: Int) throws -> URL {
+        let rootURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macgit-branch-sync-\(UUID().uuidString)", isDirectory: true)
+        let originURL = rootURL.appendingPathComponent("origin.git", isDirectory: true)
+        let localURL = rootURL.appendingPathComponent("local", isDirectory: true)
+
+        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+
+        try runGit(["init", "--bare", "--initial-branch=main", originURL.path], in: rootURL)
+        try runGit(["clone", originURL.path, localURL.path], in: rootURL)
+        try configureGit(in: localURL)
+
+        let trackedFile = localURL.appendingPathComponent("tracked.txt")
+        try "base\n".write(to: trackedFile, atomically: true, encoding: .utf8)
+        try runGit(["add", "tracked.txt"], in: localURL)
+        try runGit(["commit", "-m", "base"], in: localURL)
+        try runGit(["push", "-u", "origin", "main"], in: localURL)
+
+        for index in 1...aheadCommits {
+            try "base \(index)\n".write(to: trackedFile, atomically: true, encoding: .utf8)
+            try runGit(["add", "tracked.txt"], in: localURL)
+            try runGit(["commit", "-m", "ahead \(index)"], in: localURL)
+        }
+
+        return localURL
+    }
+
+    private func configureGit(in repositoryURL: URL) throws {
+        try runGit(["config", "user.name", "Mac Git Tests"], in: repositoryURL)
+        try runGit(["config", "user.email", "tests@example.com"], in: repositoryURL)
+    }
+
+    private func runGit(_ arguments: [String], in repositoryURL: URL) throws {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        task.arguments = arguments
+        task.currentDirectoryURL = repositoryURL
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        task.standardOutput = stdout
+        task.standardError = stderr
+
+        try task.run()
+        task.waitUntilExit()
+
+        if task.terminationStatus != 0 {
+            let outputData = stderr.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: outputData, encoding: .utf8) ?? "git failed"
+            XCTFail("git \(arguments.joined(separator: " ")) failed: \(output)")
+        }
     }
 }

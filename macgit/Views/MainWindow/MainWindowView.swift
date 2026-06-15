@@ -124,6 +124,14 @@ struct MainWindowView: View {
         SidebarView(
             repositoryURL: repositoryURL,
             selection: $selectedItem,
+            isBranchSyncing: { branch in
+                BranchSyncBadgePolicy.shouldShowLoading(
+                    for: branch,
+                    isPulling: syncState.isPulling,
+                    isPushing: syncState.isPushing,
+                    activeSyncBranch: syncState.activeSyncBranch
+                )
+            },
             onRequestCheckout: { ref, isTag in
                 if isTag {
                     tagToCheckout = ref
@@ -133,9 +141,10 @@ struct MainWindowView: View {
                     showingCheckoutConfirmation = true
                 }
             },
-            onRequestPullBranch: { branch in
-                pullPreselectedBranch = branch
-                showingPullSheet = true
+            onRequestFetchBranch: { branch in
+                Task {
+                    await syncState.performPullBranch(branch: branch, repositoryURL: repositoryURL)
+                }
             },
             onRequestApplyStash: { ref in
                 requestStashAction(ref: ref, action: .apply)

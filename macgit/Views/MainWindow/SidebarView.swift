@@ -69,8 +69,9 @@ struct BranchRowItem: Identifiable {
 struct SidebarView: View {
     let repositoryURL: URL
     @Binding var selection: SidebarSelection?
+    let isBranchSyncing: (String) -> Bool
     let onRequestCheckout: (String, Bool) -> Void
-    let onRequestPullBranch: (String) -> Void
+    let onRequestFetchBranch: (String) -> Void
     let onRequestApplyStash: (String) -> Void
     let onRequestDeleteStash: (String) -> Void
 
@@ -100,15 +101,17 @@ struct SidebarView: View {
     init(
         repositoryURL: URL,
         selection: Binding<SidebarSelection?>,
+        isBranchSyncing: @escaping (String) -> Bool = { _ in false },
         onRequestCheckout: @escaping (String, Bool) -> Void,
-        onRequestPullBranch: @escaping (String) -> Void,
+        onRequestFetchBranch: @escaping (String) -> Void,
         onRequestApplyStash: @escaping (String) -> Void = { _ in },
         onRequestDeleteStash: @escaping (String) -> Void = { _ in }
     ) {
         self.repositoryURL = repositoryURL
         self._selection = selection
+        self.isBranchSyncing = isBranchSyncing
         self.onRequestCheckout = onRequestCheckout
-        self.onRequestPullBranch = onRequestPullBranch
+        self.onRequestFetchBranch = onRequestFetchBranch
         self.onRequestApplyStash = onRequestApplyStash
         self.onRequestDeleteStash = onRequestDeleteStash
     }
@@ -552,7 +555,17 @@ struct SidebarView: View {
 
     @ViewBuilder
     private func syncBadge(for branch: String) -> some View {
-        if let status = branchSyncStatus[branch] {
+        if isBranchSyncing(branch) {
+            HStack(spacing: 0) {
+                ProgressView()
+                    .scaleEffect(0.55)
+                    .frame(width: 14, height: 10)
+            }
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(Color.secondary)
+            .cornerRadius(4)
+        } else if let status = branchSyncStatus[branch] {
             HStack(spacing: 4) {
                 if status.ahead > 0 {
                     HStack(spacing: 2) {
@@ -625,9 +638,9 @@ struct SidebarView: View {
         Divider()
 
         Button("Fetch \(branch)") {
-            onRequestPullBranch(branch)
+            onRequestFetchBranch(branch)
         }
-        .disabled(branchSyncStatus[branch]?.behind == 0)
+        .disabled(!BranchFetchActionPolicy.shouldEnableFetch(for: branchSyncStatus[branch]))
         Menu("Push to") {
             Text("No remotes configured")
         }
@@ -781,7 +794,8 @@ struct SidebarView: View {
     SidebarView(
         repositoryURL: URL(fileURLWithPath: "/tmp"),
         selection: .constant(nil),
+        isBranchSyncing: { _ in false },
         onRequestCheckout: { _, _ in },
-        onRequestPullBranch: { _ in }
+        onRequestFetchBranch: { _ in }
     )
 }

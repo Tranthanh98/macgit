@@ -26,8 +26,22 @@ extension GitStatusService {
         if !options.commitMerged { arguments.append("--no-commit") }
         if !options.includeMessages { arguments.append("--no-log") }
         if options.noFastForward { arguments.append("--no-ff") }
-        if options.rebaseInstead { arguments.append("--rebase") }
+        if options.rebaseInstead {
+            arguments.append("--rebase")
+        } else {
+            arguments.append("--no-rebase")
+        }
         return try await runGit(arguments: arguments, in: repositoryURL)
+    }
+
+    func pullBranchFromUpstream(branch: String, in repositoryURL: URL, options: PullOptions = PullOptions()) async throws -> String {
+        guard let upstreamRef = await upstreamBranch(for: branch, in: repositoryURL) else {
+            throw GitError.commandFailed("Branch '\(branch)' does not have an upstream branch.")
+        }
+        guard let remoteBranch = remoteBranchRef(from: upstreamRef) else {
+            throw GitError.commandFailed("Could not parse upstream branch '\(upstreamRef)'.")
+        }
+        return try await pull(remote: remoteBranch.remote, branch: remoteBranch.branch, options: options, in: repositoryURL)
     }
 
     func fetch(options: FetchOptions, in repositoryURL: URL) async throws {
@@ -68,5 +82,11 @@ extension GitStatusService {
         let url = (try? await runGit(arguments: ["remote", "get-url", remote], in: repositoryURL))?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return url
+    }
+
+    private func remoteBranchRef(from upstreamRef: String) -> (remote: String, branch: String)? {
+        let parts = upstreamRef.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return nil }
+        return (remote: String(parts[0]), branch: String(parts[1]))
     }
 }
