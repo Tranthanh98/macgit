@@ -740,9 +740,9 @@ struct SidebarView: View {
             currentBranch = current
             branchSyncStatus = syncMap
             print("[loadBranches] Updated branchSyncStatus with \(syncMap.count) entries")
-            // Expand all folders by default on first load
+            // Keep folders collapsed by default on first load
             if expandedFolders.isEmpty {
-                expandedFolders = allFolders
+                expandedFolders = []
             }
         }
     }
@@ -773,8 +773,9 @@ struct SidebarView: View {
         let allFolders = collectFolderPaths(from: tree)
         await MainActor.run {
             remoteNodes = tree
+            // Keep folders collapsed by default on first load
             if expandedRemoteFolders.isEmpty {
-                expandedRemoteFolders = allFolders
+                expandedRemoteFolders = []
             }
         }
     }
