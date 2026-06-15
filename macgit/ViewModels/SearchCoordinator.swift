@@ -7,7 +7,6 @@ final class SearchCoordinator: ObservableObject {
     @Published var results: [SearchResult] = []
     @Published var isLoading: Bool = false
     @Published var selectedResultID: UUID?
-    @Published var errorMessage: String?
     
     private var cancellables = Set<AnyCancellable>()
     private var searchTask: Task<Void, Never>?
@@ -36,10 +35,10 @@ final class SearchCoordinator: ObservableObject {
         }
         
         isLoading = true
-        errorMessage = nil
         
         searchTask = Task { [weak self] in
             guard let self = self else { return }
+            defer { self.searchTask = nil }
             let searchResults = await GitStatusService.shared.search(query: query, in: repositoryURL)
             
             if Task.isCancelled { return }
@@ -76,7 +75,6 @@ final class SearchCoordinator: ObservableObject {
         results = []
         selectedResultID = nil
         isLoading = false
-        errorMessage = nil
         searchTask?.cancel()
     }
 }
