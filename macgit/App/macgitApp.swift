@@ -77,7 +77,7 @@ struct macgitApp: App {
                     action = .fetch
                 }
                 .disabled(action == nil)
-                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .keyboardShortcut("f", modifiers: [.command, .option])
 
                 Divider()
 

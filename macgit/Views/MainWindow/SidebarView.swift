@@ -74,6 +74,7 @@ struct SidebarView: View {
     let onRequestFetchBranch: (String) -> Void
     let onRequestApplyStash: (String) -> Void
     let onRequestDeleteStash: (String) -> Void
+    let onRequestSearch: () -> Void
 
     @State private var branchNodes: [BranchNode] = []
     @State private var currentBranch: String = ""
@@ -105,7 +106,8 @@ struct SidebarView: View {
         onRequestCheckout: @escaping (String, Bool) -> Void,
         onRequestFetchBranch: @escaping (String) -> Void,
         onRequestApplyStash: @escaping (String) -> Void = { _ in },
-        onRequestDeleteStash: @escaping (String) -> Void = { _ in }
+        onRequestDeleteStash: @escaping (String) -> Void = { _ in },
+        onRequestSearch: @escaping () -> Void = {}
     ) {
         self.repositoryURL = repositoryURL
         self._selection = selection
@@ -114,6 +116,7 @@ struct SidebarView: View {
         self.onRequestFetchBranch = onRequestFetchBranch
         self.onRequestApplyStash = onRequestApplyStash
         self.onRequestDeleteStash = onRequestDeleteStash
+        self.onRequestSearch = onRequestSearch
     }
 
     var body: some View {
@@ -121,8 +124,15 @@ struct SidebarView: View {
             // WORKSPACE section
             Section(SidebarSection.workspace.rawValue) {
                 ForEach(SidebarSection.workspace.items) { item in
-                    Label(item.rawValue, systemImage: item.icon)
-                        .tag(SidebarSelection.item(item))
+                    if item == .search {
+                        Label(item.rawValue, systemImage: item.icon)
+                            .onTapGesture {
+                                onRequestSearch()
+                            }
+                    } else {
+                        Label(item.rawValue, systemImage: item.icon)
+                            .tag(SidebarSelection.item(item))
+                    }
                 }
             }
 

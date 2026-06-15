@@ -174,6 +174,9 @@ struct MainWindowView: View {
             },
             onRequestDeleteStash: { ref in
                 requestStashAction(ref: ref, action: .delete)
+            },
+            onRequestSearch: {
+                showingSearchModal = true
             }
         )
         .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
