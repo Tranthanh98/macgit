@@ -48,6 +48,7 @@ struct RepositorySettingsSheetView: View {
                         }
                     }
                     .padding(24)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     VStack {
                         ProgressView()
@@ -182,9 +183,11 @@ struct RepositorySettingsSheetView: View {
                     .toggleStyle(.checkbox)
             }
             .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(.quaternary.opacity(0.3))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var safetyFilesTab: some View {
@@ -262,4 +265,3 @@ struct RepositorySettingsSheetView: View {
         return [draft.selectedDetectedBranch] + candidates
     }
 }
-
