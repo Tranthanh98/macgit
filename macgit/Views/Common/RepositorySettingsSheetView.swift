@@ -27,6 +27,7 @@ struct RepositorySettingsSheetView: View {
     @State private var draft: RepositorySettingsDraft?
     @State private var remotes: [String] = []
     @State private var branches: [String] = []
+    private let settingsContentWidth: CGFloat = 420
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,7 +49,8 @@ struct RepositorySettingsSheetView: View {
                         }
                     }
                     .padding(24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: settingsContentWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 } else {
                     VStack {
                         ProgressView()
@@ -146,6 +148,7 @@ struct RepositorySettingsSheetView: View {
                 }
             }
             .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(.quaternary.opacity(0.3))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -160,6 +163,7 @@ struct RepositorySettingsSheetView: View {
                 Spacer()
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var pullFetchTab: some View {
@@ -202,6 +206,7 @@ struct RepositorySettingsSheetView: View {
                     .toggleStyle(.checkbox)
             }
             .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(.quaternary.opacity(0.3))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
@@ -215,6 +220,7 @@ struct RepositorySettingsSheetView: View {
                 Spacer()
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func loadOptions() async {
