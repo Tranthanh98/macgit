@@ -6,6 +6,7 @@
 import Foundation
 import SwiftUI
 
+@MainActor
 struct SyntaxHighlighter {
     enum TokenType {
         case keyword
@@ -21,6 +22,27 @@ struct SyntaxHighlighter {
         let regex: NSRegularExpression
         let type: TokenType
     }
+
+    private static let keywordPattern: String = {
+        let commonKeywords = Array(Set([
+            "func", "var", "let", "if", "else", "for", "while", "return", "import", "class", "struct", "enum",
+            "protocol", "extension", "init", "switch", "case", "default", "break", "continue", "in",
+            "where", "typealias", "operator", "throws", "throw", "try", "catch", "do", "guard", "defer",
+            "self", "Self", "super", "static", "final", "override", "open", "public", "internal", "private",
+            "fileprivate", "weak", "inout", "await", "async", "actor", "some", "any", "macro",
+            "const", "goto", "typedef", "union", "extern", "auto", "register", "volatile", "sizeof", "inline", "restrict",
+            "function", "interface", "extends", "implements", "new", "this", "typeof", "instanceof", "of", "yield", "export", "from",
+            "package", "namespace", "module", "protected", "abstract", "synchronized", "finally",
+            "def", "elif", "as", "with", "except", "raise", "assert", "lambda",
+            "nonlocal", "global", "pass", "del", "and", "or", "not", "is", "True", "False",
+            "None", "match", "print", "println", "mut", "fn",
+            "impl", "trait", "pub", "use", "mod", "crate", "unsafe",
+            "move", "loop", "delete", "void"
+        ]))
+        return commonKeywords.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
+    }()
+
+    private static var rulesCache: [String: [TokenRule]] = [:]
 
     private let rules: [TokenRule]
     private let fileExtension: String
@@ -98,22 +120,10 @@ struct SyntaxHighlighter {
     }
 
     private static func rules(for ext: String) -> [TokenRule] {
-        let commonKeywords = Array(Set([
-            "func", "var", "let", "if", "else", "for", "while", "return", "import", "class", "struct", "enum",
-            "protocol", "extension", "init", "switch", "case", "default", "break", "continue", "in",
-            "where", "typealias", "operator", "throws", "throw", "try", "catch", "do", "guard", "defer",
-            "self", "Self", "super", "static", "final", "override", "open", "public", "internal", "private",
-            "fileprivate", "weak", "inout", "await", "async", "actor", "some", "any", "macro",
-            "const", "goto", "typedef", "union", "extern", "auto", "register", "volatile", "sizeof", "inline", "restrict",
-            "function", "interface", "extends", "implements", "new", "this", "typeof", "instanceof", "of", "yield", "export", "from",
-            "package", "namespace", "module", "protected", "abstract", "synchronized", "finally",
-            "def", "elif", "as", "with", "except", "raise", "assert", "lambda",
-            "nonlocal", "global", "pass", "del", "and", "or", "not", "is", "True", "False",
-            "None", "match", "print", "println", "mut", "fn",
-            "impl", "trait", "pub", "use", "mod", "crate", "unsafe",
-            "move", "loop", "delete", "void"
-        ]))
-        let keywordPattern = commonKeywords.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
+        if let cached = rulesCache[ext] {
+            return cached
+        }
+
         let patterns: [(String, TokenType)]
 
         switch ext {
@@ -124,7 +134,7 @@ struct SyntaxHighlighter {
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("'([^'\\\\\\\\]|\\\\\\\\.)*'", .string),
                 ("@\\w+", .attribute),
-                ("\\b(?:\(keywordPattern))\\b", .keyword),
+                ("\\b(?:\(SyntaxHighlighter.keywordPattern))\\b", .keyword),
                 ("\\b[A-Z][A-Za-z0-9_]*\\b", .type),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
             ]
@@ -135,7 +145,7 @@ struct SyntaxHighlighter {
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("'([^'\\\\\\\\]|\\\\\\\\.)*'", .string),
                 ("`([^`\\\\\\\\]|\\\\\\\\.)*`", .string),
-                ("\\b(?:\(keywordPattern))\\b", .keyword),
+                ("\\b(?:\(SyntaxHighlighter.keywordPattern))\\b", .keyword),
                 ("\\b[A-Z][A-Za-z0-9_]*\\b", .type),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
             ]
@@ -146,7 +156,7 @@ struct SyntaxHighlighter {
                 ("'''[\\s\\S]*?'''", .string),
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("'([^'\\\\\\\\]|\\\\\\\\.)*'", .string),
-                ("\\b(?:\(keywordPattern))\\b", .keyword),
+                ("\\b(?:\(SyntaxHighlighter.keywordPattern))\\b", .keyword),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
             ]
         case "c", "cpp", "h", "hpp", "m", "mm":
@@ -155,7 +165,7 @@ struct SyntaxHighlighter {
                 ("/\\*[\\s\\S]*?\\*/", .comment),
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("'([^'\\\\\\\\]|\\\\\\\\.)*'", .string),
-                ("\\b(?:\(keywordPattern))\\b", .keyword),
+                ("\\b(?:\(SyntaxHighlighter.keywordPattern))\\b", .keyword),
                 ("\\b[A-Z][A-Za-z0-9_]*\\b", .type),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
                 ("#\\w+", .attribute),
@@ -166,7 +176,7 @@ struct SyntaxHighlighter {
                 ("/\\*[\\s\\S]*?\\*/", .comment),
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("`([^`\\\\\\\\]|\\\\\\\\.)*`", .string),
-                ("\\b(?:\(keywordPattern))\\b", .keyword),
+                ("\\b(?:\(SyntaxHighlighter.keywordPattern))\\b", .keyword),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
             ]
         case "rs":
@@ -175,7 +185,7 @@ struct SyntaxHighlighter {
                 ("/\\*[\\s\\S]*?\\*/", .comment),
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("'([^'\\\\\\\\]|\\\\\\\\.)*'", .string),
-                ("\\b(?:\(keywordPattern))\\b", .keyword),
+                ("\\b(?:\(SyntaxHighlighter.keywordPattern))\\b", .keyword),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
                 ("#\\w+", .attribute),
             ]
@@ -185,7 +195,7 @@ struct SyntaxHighlighter {
                 ("/\\*[\\s\\S]*?\\*/", .comment),
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("'([^'\\\\\\\\]|\\\\\\\\.)*'", .string),
-                ("\\b(?:\(keywordPattern))\\b", .keyword),
+                ("\\b(?:\(SyntaxHighlighter.keywordPattern))\\b", .keyword),
                 ("\\b[A-Z][A-Za-z0-9_]*\\b", .type),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
                 ("@\\w+", .attribute),
@@ -195,7 +205,7 @@ struct SyntaxHighlighter {
                 ("#[^\n]*", .comment),
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("'([^'\\\\\\\\]|\\\\\\\\.)*'", .string),
-                ("\\b(?:\(keywordPattern))\\b", .keyword),
+                ("\\b(?:\(SyntaxHighlighter.keywordPattern))\\b", .keyword),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
             ]
         case "yaml", "yml":
@@ -203,7 +213,7 @@ struct SyntaxHighlighter {
                 ("#[^\n]*", .comment),
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("'([^'\\\\\\\\]|\\\\\\\\.)*'", .string),
-                ("\\b(?:\(keywordPattern))\\b", .keyword),
+                ("\\b(?:\(SyntaxHighlighter.keywordPattern))\\b", .keyword),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
             ]
         case "sql":
@@ -221,14 +231,16 @@ struct SyntaxHighlighter {
                 ("#[^\n]*", .comment),
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("'([^'\\\\\\\\]|\\\\\\\\.)*'", .string),
-                ("\\b(?:\(keywordPattern))\\b", .keyword),
+                ("\\b(?:\(SyntaxHighlighter.keywordPattern))\\b", .keyword),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
             ]
         }
 
-        return patterns.compactMap { pattern, type in
+        let result: [TokenRule] = patterns.compactMap { pattern, type in
             guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
             return TokenRule(regex: regex, type: type)
         }
+        rulesCache[ext] = result
+        return result
     }
 }
