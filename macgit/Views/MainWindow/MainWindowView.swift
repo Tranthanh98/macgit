@@ -64,6 +64,10 @@ struct MainWindowView: View {
                 }
                 .transition(.opacity)
             }
+
+            MainWindowKeyboardHandler(showingSearchModal: $showingSearchModal)
+                .frame(width: 0, height: 0)
+                .opacity(0)
         }
         .overlay(
             GeometryReader { geo in
@@ -75,7 +79,12 @@ struct MainWindowView: View {
         }
         .toolbar { toolbarContent }
         .navigationTitle("")
-        .focusedValue(\.toolbarAction, toolbarActionBinding)
+        .focusedSceneValue(\.toolbarAction, toolbarActionBinding)
+        .focusedSceneValue(\.toolbarActionState, ToolbarActionState(
+            isSyncing: syncState.isAnySyncing,
+            stagedCount: syncState.stagedBadgeCount,
+            stashableCount: syncState.stashableCount
+        ))
         .frame(minWidth: 900, minHeight: 600)
         .task { await performInitialLoad() }
         .onChange(of: selectedItem) { _, newItem in
@@ -137,6 +146,14 @@ struct MainWindowView: View {
             guard repoSettings.refreshOnAppActive else { return }
             Task {
                 await syncState.refresh(repositoryURL: repositoryURL)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showSearchModal)) { _ in
+            showingSearchModal = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toolbarAction)) { notification in
+            if let action = notification.userInfo?["action"] as? ToolbarAction {
+                handleToolbarAction(action)
             }
         }
     }

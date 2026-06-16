@@ -53,58 +53,56 @@ struct macgitApp: App {
             }
 
             CommandMenu("Actions") {
-                @FocusedBinding(\.toolbarAction) var action: ToolbarAction?
-
                 Button("Commit...") {
-                    action = .commit
+                    NotificationCenter.default.post(name: .toolbarAction, object: nil, userInfo: ["action": ToolbarAction.commit])
                 }
-                .disabled(action == nil)
+                .disabled(!appState.hasOpenRepository)
                 .keyboardShortcut("c", modifiers: [.command, .shift])
 
                 Button("Pull") {
-                    action = .pull
+                    NotificationCenter.default.post(name: .toolbarAction, object: nil, userInfo: ["action": ToolbarAction.pull])
                 }
-                .disabled(action == nil)
+                .disabled(!appState.hasOpenRepository)
                 .keyboardShortcut("p", modifiers: [.command, .shift])
 
                 Button("Push") {
-                    action = .push
+                    NotificationCenter.default.post(name: .toolbarAction, object: nil, userInfo: ["action": ToolbarAction.push])
                 }
-                .disabled(action == nil)
+                .disabled(!appState.hasOpenRepository)
                 .keyboardShortcut("p", modifiers: [.command, .option])
 
                 Button("Fetch") {
-                    action = .fetch
+                    NotificationCenter.default.post(name: .toolbarAction, object: nil, userInfo: ["action": ToolbarAction.fetch])
                 }
-                .disabled(action == nil)
+                .disabled(!appState.hasOpenRepository)
                 .keyboardShortcut("f", modifiers: [.command, .option])
 
                 Divider()
 
                 Button("Branch...") {
-                    action = .branch
+                    NotificationCenter.default.post(name: .toolbarAction, object: nil, userInfo: ["action": ToolbarAction.branch])
                 }
-                .disabled(action == nil)
+                .disabled(!appState.hasOpenRepository)
                 .keyboardShortcut("b", modifiers: [.command, .shift])
 
                 Button("Merge...") {
-                    action = .merge
+                    NotificationCenter.default.post(name: .toolbarAction, object: nil, userInfo: ["action": ToolbarAction.merge])
                 }
-                .disabled(action == nil)
+                .disabled(!appState.hasOpenRepository)
                 .keyboardShortcut("m", modifiers: [.command, .shift])
 
                 Button("Stash...") {
-                    action = .stash
+                    NotificationCenter.default.post(name: .toolbarAction, object: nil, userInfo: ["action": ToolbarAction.stash])
                 }
-                .disabled(action == nil)
+                .disabled(!appState.hasOpenRepository)
                 .keyboardShortcut("s", modifiers: [.command, .shift])
 
                 Divider()
 
                 Button("Search...") {
-                    action = .search
+                    NotificationCenter.default.post(name: .showSearchModal, object: nil)
                 }
-                .disabled(action == nil)
+                .disabled(!appState.hasOpenRepository)
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }
         }
