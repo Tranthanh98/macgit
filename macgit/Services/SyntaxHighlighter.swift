@@ -65,8 +65,8 @@ struct SyntaxHighlighter {
         }
 
         for (range, type) in mergedRanges {
-            if let swiftRange = Range(range, in: text) {
-                let attrRange = convertRange(swiftRange, in: attributed)
+            if let swiftRange = Range(range, in: text),
+               let attrRange = convertRange(swiftRange, in: attributed) {
                 switch type {
                 case .keyword:
                     attributed[attrRange].foregroundColor = Color(nsColor: NSColor(calibratedRed: 0.80, green: 0.35, blue: 0.60, alpha: 1.0))
@@ -89,9 +89,11 @@ struct SyntaxHighlighter {
         return attributed
     }
 
-    private func convertRange(_ range: Range<String.Index>, in attributed: AttributedString) -> Range<AttributedString.Index> {
-        let start = AttributedString.Index(range.lowerBound, within: attributed)!
-        let end = AttributedString.Index(range.upperBound, within: attributed)!
+    private func convertRange(_ range: Range<String.Index>, in attributed: AttributedString) -> Range<AttributedString.Index>? {
+        guard let start = AttributedString.Index(range.lowerBound, within: attributed),
+              let end = AttributedString.Index(range.upperBound, within: attributed) else {
+            return nil
+        }
         return start..<end
     }
 
@@ -109,7 +111,7 @@ struct SyntaxHighlighter {
             "nonlocal", "global", "pass", "del", "and", "or", "not", "is", "True", "False",
             "None", "match", "print", "println", "mut", "fn",
             "impl", "trait", "pub", "use", "mod", "crate", "unsafe",
-            "move", "loop", "delete", "void", "with"
+            "move", "loop", "delete", "void"
         ]))
         let keywordPattern = commonKeywords.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
         let patterns: [(String, TokenType)]
@@ -121,7 +123,7 @@ struct SyntaxHighlighter {
                 ("/\\*[\\s\\S]*?\\*/", .comment),
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("'([^'\\\\\\\\]|\\\\\\\\.)*'", .string),
-                ("#\\[.*\\]", .attribute),
+                ("@\\w+", .attribute),
                 ("\\b(?:\(keywordPattern))\\b", .keyword),
                 ("\\b[A-Z][A-Za-z0-9_]*\\b", .type),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
@@ -209,7 +211,7 @@ struct SyntaxHighlighter {
                 ("--[^\n]*", .comment),
                 ("\"([^\"\\\\\\\\]|\\\\\\\\.)*\"", .string),
                 ("'([^'\\\\\\\\]|\\\\\\\\.)*'", .string),
-                ("\\b(?:SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|ON|GROUP|BY|ORDER|HAVING|LIMIT|OFFSET|UNION|ALL|DISTINCT|CREATE|TABLE|INDEX|DROP|ALTER|ADD|COLUMN|VALUES|SET|AND|OR|NOT|NULL|IS|IN|BETWEEN|LIKE|EXISTS|CASE|WHEN|THEN|ELSE|END|AS|WITH|RECURSIVE|RETURNING|INTO|USING|NATURAL|CROSS|FULL|FETCH|FOR|UPDATE|OF|NOWAIT|SKIP|LOCKED|SHARE|KEY|PRIMARY|FOREIGN|REFERENCES|CONSTRAINT|CHECK|DEFAULT|UNIQUE|VIEW|TRIGGER|PROCEDURE|FUNCTION|DATABASE|SCHEMA|TRANSACTION|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|GRANT|REVOKE|PRIVILEGES|TO|IDENTIFIED|BY|PASSWORD|ACCOUNT|LOCK|UNLOCK|IF|EXISTS|CASCADE|RESTRICT)\\b", .keyword),
+                ("\\b(?:SELECT|INSERT|UPDATE|DELETE|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|ON|GROUP|BY|ORDER|HAVING|LIMIT|OFFSET|UNION|ALL|DISTINCT|CREATE|TABLE|INDEX|DROP|ALTER|ADD|COLUMN|VALUES|SET|AND|OR|NOT|NULL|IS|IN|BETWEEN|LIKE|EXISTS|CASE|WHEN|THEN|ELSE|END|AS|WITH|RECURSIVE|RETURNING|INTO|USING|NATURAL|CROSS|FULL|FETCH|FOR|OF|NOWAIT|SKIP|LOCKED|SHARE|KEY|PRIMARY|FOREIGN|REFERENCES|CONSTRAINT|CHECK|DEFAULT|UNIQUE|VIEW|TRIGGER|PROCEDURE|FUNCTION|DATABASE|SCHEMA|TRANSACTION|COMMIT|ROLLBACK|SAVEPOINT|RELEASE|GRANT|REVOKE|PRIVILEGES|TO|IDENTIFIED|PASSWORD|ACCOUNT|LOCK|UNLOCK|IF|CASCADE|RESTRICT)\\b", .keyword),
                 ("\\b\\d+(\\.\\d+)?\\b", .number),
             ]
         default:
