@@ -218,6 +218,10 @@ struct FileStatusView: View {
 
     private func moreButton(file: StatusFile, isStaged: Bool) -> some View {
         Menu {
+            Button("Open") { openFile(file: file) }
+            Button("Show in Finder") { showInFinder(file: file) }
+            Divider()
+
             if isStaged {
                 Button("Unstage") { Task { await unstage(file: file) } }
                 Button("Remove") { Task { await remove(file: file) } }
@@ -229,8 +233,33 @@ struct FileStatusView: View {
                     Button("Ignore") { ignoreTargetFile = file }
                 }
             }
+
             Divider()
-            Button("Show in Finder") { showInFinder(file: file) }
+
+            if !isStaged {
+                Button("Reset") { Task { await discard(file: file) } }
+
+                if !recentCommits.isEmpty {
+                    Menu("Reset to Commit...") {
+                        ForEach(recentCommits, id: \.hash) { commit in
+                            Button("\(commit.hash) \(commit.message)") {
+                                Task { await resetToCommit(file: file, commit: commit.hash) }
+                            }
+                        }
+                    }
+                }
+
+                if file.status == .conflict {
+                    Menu("Resolve Conflicts") {
+                        Button("Resolve Using 'Ours'") {
+                            Task { await resolveConflict(file: file, using: .ours) }
+                        }
+                        Button("Resolve Using 'Theirs'") {
+                            Task { await resolveConflict(file: file, using: .theirs) }
+                        }
+                    }
+                }
+            }
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 11, weight: .semibold))
