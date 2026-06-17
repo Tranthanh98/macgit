@@ -137,6 +137,29 @@ extension GitStatusService {
         _ = try await runGit(arguments: ["add", file.path], in: repositoryURL)
     }
 
+    func conflictDocument(for file: StatusFile, in repositoryURL: URL) async throws -> ConflictResolutionDocument {
+        let fileURL = repositoryURL.appendingPathComponent(file.path)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw GitError.commandFailed("Conflicted file could not be found on disk.")
+        }
+
+        let workingTreeContent = try String(contentsOf: fileURL, encoding: .utf8)
+        let currentContent = try await runGit(arguments: ["show", ":2:\(file.path)"], in: repositoryURL)
+        let incomingContent = try await runGit(arguments: ["show", ":3:\(file.path)"], in: repositoryURL)
+
+        return try ConflictResolutionDocument.parse(
+            workingTreeContent,
+            currentContent: currentContent,
+            incomingContent: incomingContent
+        )
+    }
+
+    func resolveConflict(file: StatusFile, in repositoryURL: URL, with document: ConflictResolutionDocument) async throws {
+        let fileURL = repositoryURL.appendingPathComponent(file.path)
+        try document.resolvedText.write(to: fileURL, atomically: true, encoding: .utf8)
+        _ = try await runGit(arguments: ["add", "--", file.path], in: repositoryURL)
+    }
+
     func resetToCommit(file: StatusFile, commit: String, in repositoryURL: URL) async throws {
         _ = try await runGit(arguments: ["checkout", commit, "--", file.path], in: repositoryURL)
     }
