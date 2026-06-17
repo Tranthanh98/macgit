@@ -56,32 +56,33 @@ struct ConflictMergeToolView: View {
     // MARK: - Sidebar
 
     private var fileSidebar: some View {
-        List(allConflictFiles, selection: $selectedFile) { file in
-            HStack(spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.purple)
-                    .font(.system(size: 14, weight: .medium))
+        List(selection: $selectedFile) {
+            Section("CONFLICT FILES") {
+                ForEach(allConflictFiles) { file in
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.purple)
+                            .font(.system(size: 14, weight: .medium))
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(file.displayName)
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
-                    Text(file.directory)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(file.displayName)
+                                .font(.system(size: 12))
+                                .lineLimit(1)
+                            Text(file.directory)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+                    }
+                    .padding(.vertical, 2)
+                    .tag(file)
                 }
             }
-            .padding(.vertical, 2)
-            .tag(file)
         }
-        .listStyle(.inset)
-        .frame(width: 240)
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(.separator)
-                .frame(width: 0.5)
-        }
+        .listStyle(.sidebar)
+        .frame(minWidth: 200, idealWidth: 220, maxWidth: 260)
     }
 
     // MARK: - Main Content
