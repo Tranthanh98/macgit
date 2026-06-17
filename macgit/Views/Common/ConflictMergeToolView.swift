@@ -6,11 +6,10 @@
 import SwiftUI
 
 struct ConflictMergeToolView: View {
-    @Environment(\.dismiss) private var dismiss
-
     let allConflictFiles: [StatusFile]
     let repositoryURL: URL
     let onResolved: () -> Void
+    let onClose: () -> Void
 
     @State private var selectedFile: StatusFile
     @State private var document: ConflictResolutionDocument?
@@ -20,13 +19,13 @@ struct ConflictMergeToolView: View {
     @State private var showingError = false
     @State private var selectedConflictIndex = 0
     @State private var hasUnsavedChanges = false
-    @State private var showingCloseConfirmation = false
     @State private var sidebarCollapsed = false
 
-    init(allConflictFiles: [StatusFile], repositoryURL: URL, onResolved: @escaping () -> Void) {
+    init(allConflictFiles: [StatusFile], repositoryURL: URL, onResolved: @escaping () -> Void, onClose: @escaping () -> Void) {
         self.allConflictFiles = allConflictFiles
         self.repositoryURL = repositoryURL
         self.onResolved = onResolved
+        self.onClose = onClose
         self._selectedFile = State(initialValue: allConflictFiles.first!)
     }
 
@@ -41,24 +40,12 @@ struct ConflictMergeToolView: View {
         .frame(minHeight: 800, idealHeight: 900, maxHeight: .infinity)
         .toolbar {
             ToolbarItem(placement: .navigation) {
-                HStack(spacing: 8) {
-                    // Close button (traffic light style)
-                    Button(action: { requestClose() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 14))
-                            .foregroundStyle(.red)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Close")
-
-                    // Sidebar toggle
-                    Button(action: { sidebarCollapsed.toggle() }) {
-                        Image(systemName: sidebarCollapsed ? "sidebar.right" : "sidebar.left")
-                            .font(.system(size: 13))
-                    }
-                    .buttonStyle(.plain)
-                    .help(sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar")
+                Button(action: { sidebarCollapsed.toggle() }) {
+                    Image(systemName: sidebarCollapsed ? "sidebar.right" : "sidebar.left")
+                        .font(.system(size: 13))
                 }
+                .buttonStyle(.plain)
+                .help(sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar")
             }
         }
         .task {
@@ -69,14 +56,6 @@ struct ConflictMergeToolView: View {
         }, message: {
             Text(errorMessage ?? "An unknown error occurred")
         })
-        .alert("Unsaved Changes", isPresented: $showingCloseConfirmation) {
-            Button("Cancel", role: .cancel) {}
-            Button("Discard Changes", role: .destructive) {
-                dismiss()
-            }
-        } message: {
-            Text("You have unsaved conflict resolutions. Are you sure you want to close and discard your changes?")
-        }
         .onChange(of: selectedFile) { _, newFile in
             if hasUnsavedChanges {
                 // In a real app, show confirmation here. For now, just proceed.
@@ -94,14 +73,6 @@ struct ConflictMergeToolView: View {
                 sidebarCollapsed = (newValue == .detailOnly)
             }
         )
-    }
-
-    private func requestClose() {
-        if hasUnsavedChanges {
-            showingCloseConfirmation = true
-        } else {
-            dismiss()
-        }
     }
 
     // MARK: - Sidebar
@@ -210,7 +181,7 @@ struct ConflictMergeToolView: View {
 
             HStack(spacing: 12) {
                 Button("Cancel", role: .cancel) {
-                    dismiss()
+                    onClose()
                 }
                 .keyboardShortcut(.cancelAction)
 
@@ -461,7 +432,7 @@ struct ConflictMergeToolView: View {
                    currentIndex + 1 < allConflictFiles.count {
                     selectedFile = allConflictFiles[currentIndex + 1]
                 } else {
-                    dismiss()
+                    onClose()
                     onResolved()
                 }
             }

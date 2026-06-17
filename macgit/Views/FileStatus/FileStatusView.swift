@@ -26,7 +26,7 @@ struct FileStatusView: View {
     @State private var currentBranch: String?
     @State private var recentCommits: [(hash: String, message: String)] = []
     @State private var ignoreTargetFile: StatusFile? = nil
-    @State private var mergeToolFile: StatusFile? = nil
+    @State private var conflictResolverWindow: NSWindow?
 
     private var changedFiles: [StatusFile] {
         gitStatus.unstaged + gitStatus.untracked
@@ -97,25 +97,7 @@ struct FileStatusView: View {
                 }
             )
         }
-        .sheet(item: $mergeToolFile) { file in
-            let allConflictFiles = (gitStatus.staged + gitStatus.unstaged + gitStatus.untracked)
-                .filter { $0.status == .conflict }
-                .reduce(into: [String: StatusFile]()) { dict, file in
-                    dict[file.path] = file
-                }
-                .values
-                .sorted { $0.path < $1.path }
-            ConflictMergeToolView(
-                allConflictFiles: allConflictFiles,
-                repositoryURL: repositoryURL,
-                onResolved: {
-                    Task {
-                        await loadStatus()
-                        await syncState?.refresh(repositoryURL: repositoryURL)
-                    }
-                }
-            )
-        }
+
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task {
                 await loadStatus()
@@ -278,7 +260,7 @@ struct FileStatusView: View {
                             Task { await resolveConflict(file: file, using: .theirs) }
                         }
                         Button("Resolve Manually…") {
-                            mergeToolFile = file
+                            openConflictResolverWindow(for: file)
                         }
                     }
                 }
@@ -336,7 +318,7 @@ struct FileStatusView: View {
                         Task { await resolveConflict(file: file, using: .theirs) }
                     }
                     Button("Resolve Manually…") {
-                        mergeToolFile = file
+                        openConflictResolverWindow(for: file)
                     }
                 }
             }
@@ -778,5 +760,45 @@ struct FileStatusView: View {
             errorMessage = error.localizedDescription
             showingError = true
         }
+    }
+
+    private func openConflictResolverWindow(for file: StatusFile) {
+        // Close existing window if any
+        conflictResolverWindow?.close()
+
+        let allConflictFiles = (gitStatus.staged + gitStatus.unstaged + gitStatus.untracked)
+            .filter { $0.status == .conflict }
+            .reduce(into: [String: StatusFile]()) { dict, file in
+                dict[file.path] = file
+            }
+            .values
+            .sorted { $0.path < $1.path }
+
+        let view = ConflictMergeToolView(
+            allConflictFiles: allConflictFiles,
+            repositoryURL: repositoryURL,
+            onResolved: { [repositoryURL] in
+                Task {
+                    await loadStatus()
+                    await syncState?.refresh(repositoryURL: repositoryURL)
+                }
+            },
+            onClose: { [weak conflictResolverWindow] in
+                conflictResolverWindow?.close()
+            }
+        )
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Resolve Conflicts"
+        window.contentView = NSHostingView(rootView: view)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+
+        conflictResolverWindow = window
     }
 }
