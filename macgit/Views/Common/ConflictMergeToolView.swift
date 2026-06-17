@@ -19,7 +19,6 @@ struct ConflictMergeToolView: View {
     @State private var showingError = false
     @State private var selectedConflictIndex = 0
     @State private var hasUnsavedChanges = false
-    @State private var sidebarCollapsed = false
 
     init(allConflictFiles: [StatusFile], repositoryURL: URL, onResolved: @escaping () -> Void, onClose: @escaping () -> Void) {
         self.allConflictFiles = allConflictFiles
@@ -30,7 +29,7 @@ struct ConflictMergeToolView: View {
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: sidebarVisibility) {
+        NavigationSplitView {
             fileSidebar
                 .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
         } detail: {
@@ -38,16 +37,6 @@ struct ConflictMergeToolView: View {
         }
         .frame(minWidth: 1200, idealWidth: 1400, maxWidth: .infinity)
         .frame(minHeight: 800, idealHeight: 900, maxHeight: .infinity)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button(action: { sidebarCollapsed.toggle() }) {
-                    Image(systemName: sidebarCollapsed ? "sidebar.right" : "sidebar.left")
-                        .font(.system(size: 13))
-                }
-                .buttonStyle(.plain)
-                .help(sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar")
-            }
-        }
         .task {
             await loadDocument(for: selectedFile)
         }
@@ -66,40 +55,15 @@ struct ConflictMergeToolView: View {
         }
     }
 
-    private var sidebarVisibility: Binding<NavigationSplitViewVisibility> {
-        Binding(
-            get: { sidebarCollapsed ? .detailOnly : .all },
-            set: { newValue in
-                sidebarCollapsed = (newValue == .detailOnly)
-            }
-        )
-    }
-
     // MARK: - Sidebar
 
     private var fileSidebar: some View {
         List(selection: $selectedFile) {
             Section("CONFLICT FILES") {
                 ForEach(allConflictFiles) { file in
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.purple)
-                            .font(.system(size: 14, weight: .medium))
-
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(file.displayName)
-                                .font(.system(size: 12))
-                                .lineLimit(1)
-                            Text(file.directory)
-                                .font(.system(size: 10))
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
-                        }
-
-                        Spacer()
-                    }
-                    .padding(.vertical, 2)
-                    .tag(file)
+                    Label(file.displayName, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.purple)
+                        .tag(file)
                 }
             }
         }
