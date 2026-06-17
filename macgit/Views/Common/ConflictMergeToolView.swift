@@ -29,14 +29,12 @@ struct ConflictMergeToolView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            fileSidebar
-                .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 260)
-        } detail: {
-            mainContent
+        ZStack {
+            rootView
         }
-        .frame(minWidth: 1200, idealWidth: 1400, maxWidth: .infinity)
-        .frame(minHeight: 800, idealHeight: 900, maxHeight: .infinity)
+        .frame(minWidth: 900, minHeight: 600)
+        .navigationTitle("")
+        .toolbar {}
         .task {
             await loadDocument(for: selectedFile)
         }
@@ -55,27 +53,47 @@ struct ConflictMergeToolView: View {
         }
     }
 
+    // MARK: - Root
+
+    @ViewBuilder
+    private var rootView: some View {
+        NavigationSplitView {
+            sidebarPane
+        } detail: {
+            detailPane
+        }
+    }
+
     // MARK: - Sidebar
 
-    private var fileSidebar: some View {
+    private var sidebarPane: some View {
         List(selection: $selectedFile) {
-            Section("CONFLICT FILES") {
-                ForEach(allConflictFiles) { file in
-                    Label(file.displayName, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.purple)
-                        .tag(file)
-                }
+            ForEach(allConflictFiles) { file in
+                Label(file.displayName, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.purple)
+                    .tag(file)
             }
         }
         .listStyle(.sidebar)
+        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
     }
 
-    // MARK: - Main Content
+    // MARK: - Detail
 
-    private var mainContent: some View {
+    @ViewBuilder
+    private var detailPane: some View {
         VStack(spacing: 0) {
+            Color(nsColor: .controlBackgroundColor)
+                .frame(height: 1)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(.separator)
+                        .frame(height: 0.5)
+                }
+
             headerBar
             Divider()
+
             if isLoading {
                 ProgressView("Loading conflict details…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
