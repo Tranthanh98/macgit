@@ -46,3 +46,21 @@ struct GlassProminentButtonStyle: ButtonStyle {
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
+
+struct ProminentButtonStyle: ButtonStyle {
+    var tint: Color = .accentColor
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(tint)
+            )
+            .opacity(configuration.isPressed ? 0.85 : 1.0)
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+}

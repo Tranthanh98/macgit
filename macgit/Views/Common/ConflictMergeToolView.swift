@@ -34,7 +34,7 @@ struct ConflictMergeToolView: View {
         }
         .frame(minWidth: 900, minHeight: 600)
         .navigationTitle("")
-        .toolbar {}
+        .toolbar { toolbarContent }
         .task {
             await loadDocument(for: selectedFile)
         }
@@ -91,9 +91,6 @@ struct ConflictMergeToolView: View {
                         .frame(height: 0.5)
                 }
 
-            headerBar
-            Divider()
-
             if isLoading {
                 ProgressView("Loading conflict details…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -122,64 +119,91 @@ struct ConflictMergeToolView: View {
         }
     }
 
-    // MARK: - Header Bar
+    // MARK: - Toolbar
 
-    private var headerBar: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Resolve Conflicts")
-                    .font(.headline.weight(.semibold))
-                Text(selectedFile.path)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
             if let document = document {
-                let conflictCount = document.conflictCount
-                let remaining = conflictCount - resolvedCount(in: document)
-                Text("Conflict \(selectedConflictIndex + 1) of \(conflictCount) — \(remaining) remaining")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 8) {
-                    Button("Previous") {
+                HStack(spacing: 0) {
+                    Button {
                         navigateToPreviousConflict(in: document)
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 28, height: 22)
                     }
-                    .buttonStyle(GlassButtonStyle(tint: .secondary, fontSize: 11))
+                    // .buttonStyle(.plain)
                     .disabled(selectedConflictIndex == 0)
+                    .accessibilityLabel("Previous conflict")
 
-                    Button("Next") {
+                    Divider()
+                        .frame(height: 12)
+
+                    Button {
                         navigateToNextConflict(in: document)
+                    } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 28, height: 22)
                     }
-                    .buttonStyle(GlassButtonStyle(tint: .secondary, fontSize: 11))
-                    .disabled(selectedConflictIndex >= conflictCount - 1)
+                    // .buttonStyle(.plain)
+                    .disabled(selectedConflictIndex >= document.conflictCount - 1)
+                    .accessibilityLabel("Next conflict")
                 }
-            }
-
-            Spacer()
-
-            HStack(spacing: 12) {
-                Button("Cancel", role: .cancel) {
-                    onClose()
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Button(isSaving ? "Resolving…" : "Complete / Merge") {
-                    Task {
-                        await saveAndAdvance()
-                    }
-                }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(GlassProminentButtonStyle(tint: .accentColor, fontSize: 13))
-                .disabled(isSaving)
+                .background(
+                    Capsule()
+                        .fill(Color(nsColor: .controlBackgroundColor))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(Color(nsColor: .separatorColor).opacity(0.5), lineWidth: 0.5)
+                )
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+
+        ToolbarItem(placement: .principal) {
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Resolve Conflicts")
+                        .font(.headline.weight(.semibold))
+                    Text(selectedFile.path)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                if let document = document {
+                    let conflictCount = document.conflictCount
+                    let remaining = conflictCount - resolvedCount(in: document)
+                    Text("Conflict \(selectedConflictIndex + 1) of \(conflictCount) — \(remaining) remaining")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal)
+        }
+
+        ToolbarItem(placement: .confirmationAction) {
+            Button {
+                Task {
+                    await saveAndAdvance()
+                }
+            } label: {
+                Text(isSaving ? "Resolving…" : "Merge")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.accentColor)
+                    )
+            }
+            .keyboardShortcut(.defaultAction)
+            .buttonStyle(.plain)
+            .disabled(isSaving)
+        }
     }
 
     // MARK: - Conflict Block
