@@ -95,19 +95,7 @@ struct ConflictMergeToolView: View {
                 ProgressView("Loading conflict details…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let document = document {
-                ScrollView {
-                    LazyVStack(spacing: 16) {
-                        ForEach(Array(document.sections.enumerated()), id: \.offset) { index, section in
-                            if section.isConflict {
-                                conflictBlockView(section: section, sectionIndex: index, document: document)
-                            } else {
-                                contextBlockView(text: section.contextText)
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 16)
-                }
+                threePanelView(document: document)
             } else {
                 EmptyStateView(
                     icon: "arrow.triangle.merge",
@@ -117,6 +105,102 @@ struct ConflictMergeToolView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+    }
+
+    // MARK: - Three Panel View
+
+    private func threePanelView(document: ConflictResolutionDocument) -> some View {
+        let incomingData = buildPanelData(document: document, content: document.incomingContent, textSelector: \.incomingPaneText)
+        let currentData = buildPanelData(document: document, content: document.currentContent, textSelector: \.currentPaneText)
+        let resultData = buildPanelData(document: document, content: document.resolvedText, textSelector: \.resolvedText)
+
+        return ScrollView(.vertical) {
+            VStack(spacing: 0) {
+                // Top row: Incoming | Current
+                HStack(alignment: .top, spacing: 0) {
+                    panelView(title: "Incoming", data: incomingData, highlightColor: Color(nsColor: .systemGreen).opacity(0.7))
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                    Divider()
+
+                    panelView(title: "Current", data: currentData, highlightColor: Color(nsColor: .systemBlue).opacity(0.7))
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+
+                Divider()
+
+                // Bottom row: Result
+                panelView(title: "Result", data: resultData, highlightColor: Color(nsColor: .systemPurple).opacity(0.7))
+            }
+        }
+    }
+
+    private func panelView(title: String, data: PanelData, highlightColor: Color) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            HStack {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.secondary.opacity(0.04))
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(.separator.opacity(0.5))
+                    .frame(height: 0.5)
+            }
+
+            // Content
+            ConflictCodeView(
+                text: data.text,
+                fileExtension: selectedFile.fileExtension,
+                highlightedLines: data.highlightedLines,
+                highlightColor: highlightColor
+            )
+        }
+    }
+
+    // MARK: - Panel Data
+
+    private struct PanelData {
+        let text: String
+        let highlightedLines: Set<Int>
+    }
+
+    private func buildPanelData(
+        document: ConflictResolutionDocument,
+        content: String,
+        textSelector: KeyPath<ConflictResolutionSection, String>
+    ) -> PanelData {
+        var highlightedLines = Set<Int>()
+        var currentLine = 1
+
+        for section in document.sections {
+            let text = section[keyPath: textSelector]
+            let sectionLines = lines(of: text)
+            let count = sectionLines.count
+
+            if section.isConflict {
+                for i in 0..<count {
+                    highlightedLines.insert(currentLine + i)
+                }
+            }
+
+            currentLine += count
+        }
+
+        return PanelData(text: content, highlightedLines: highlightedLines)
+    }
+
+    private func lines(of text: String) -> [String] {
+        var components = text.components(separatedBy: "\n")
+        if components.last == "" {
+            components.removeLast()
+        }
+        return components
     }
 
     // MARK: - Toolbar
@@ -133,7 +217,6 @@ struct ConflictMergeToolView: View {
                             .font(.system(size: 12, weight: .semibold))
                             .frame(width: 28, height: 22)
                     }
-                    // .buttonStyle(.plain)
                     .disabled(selectedConflictIndex == 0)
                     .accessibilityLabel("Previous conflict")
 
@@ -147,7 +230,6 @@ struct ConflictMergeToolView: View {
                             .font(.system(size: 12, weight: .semibold))
                             .frame(width: 28, height: 22)
                     }
-                    // .buttonStyle(.plain)
                     .disabled(selectedConflictIndex >= document.conflictCount - 1)
                     .accessibilityLabel("Next conflict")
                 }
@@ -206,187 +288,7 @@ struct ConflictMergeToolView: View {
         }
     }
 
-    // MARK: - Conflict Block
-
-    private func conflictBlockView(section: ConflictResolutionSection, sectionIndex: Int, document: ConflictResolutionDocument) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack(spacing: 12) {
-                HStack(spacing: 16) {
-                    Toggle("Current", isOn: Binding(
-                        get: { section.resolution == .current || section.resolution == .both },
-                        set: { isOn in
-                            applyCheckbox(isCurrent: true, isOn: isOn, to: sectionIndex)
-                        }
-                    ))
-                    .toggleStyle(.checkbox)
-
-                    Toggle("Incoming", isOn: Binding(
-                        get: { section.resolution == .incoming || section.resolution == .both },
-                        set: { isOn in
-                            applyCheckbox(isCurrent: false, isOn: isOn, to: sectionIndex)
-                        }
-                    ))
-                    .toggleStyle(.checkbox)
-                }
-
-                Spacer()
-
-                Text("Conflict Block")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.purple)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 2)
-                    .background(Color.purple.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.purple.opacity(0.04))
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(.separator.opacity(0.5))
-                    .frame(height: 0.5)
-            }
-
-            // Panes
-            VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    codePane(title: "Current", text: section.currentText, isReadOnly: true)
-                    Divider()
-                    codePane(title: "Incoming", text: section.incomingText, isReadOnly: true)
-                }
-                .frame(minHeight: 120)
-
-                Divider()
-
-                resultPane(section: section, sectionIndex: sectionIndex)
-                    .frame(minHeight: 120)
-            }
-        }
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.purple.opacity(0.2), lineWidth: 1)
-        )
-        .id(section.id)
-    }
-
-    // MARK: - Context Block
-
-    private func contextBlockView(text: String) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            CodeBlockView(text: text, fileExtension: selectedFile.fileExtension)
-        }
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(.separator.opacity(0.3), lineWidth: 0.5)
-        )
-    }
-
-    // MARK: - Code Pane
-
-    private func codePane(title: String, text: String, isReadOnly: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.secondary.opacity(0.04))
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(.separator.opacity(0.5))
-                    .frame(height: 0.5)
-            }
-
-            ScrollView(.horizontal) {
-                CodeBlockView(text: text, fileExtension: selectedFile.fileExtension)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 8)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    // MARK: - Result Pane
-
-    private func resultPane(section: ConflictResolutionSection, sectionIndex: Int) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Result")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.secondary.opacity(0.04))
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(.separator.opacity(0.5))
-                    .frame(height: 0.5)
-            }
-
-            ScrollView(.horizontal) {
-                CodeEditorView(
-                    text: resultBinding(for: sectionIndex),
-                    fileExtension: selectedFile.fileExtension
-                )
-                .frame(minHeight: 100)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 8)
-            }
-        }
-    }
-
     // MARK: - Helpers
-
-    private func applyCheckbox(isCurrent: Bool, isOn: Bool, to sectionIndex: Int) {
-        guard var document = document else { return }
-        let section = document.sections[sectionIndex]
-        let currentOn = isCurrent ? isOn : (section.resolution == .current || section.resolution == .both)
-        let incomingOn = !isCurrent ? isOn : (section.resolution == .incoming || section.resolution == .both)
-
-        if currentOn && incomingOn {
-            document.sections[sectionIndex].resolution = .both
-            document.sections[sectionIndex].manualResult = ""
-        } else if currentOn {
-            document.sections[sectionIndex].resolution = .current
-            document.sections[sectionIndex].manualResult = ""
-        } else if incomingOn {
-            document.sections[sectionIndex].resolution = .incoming
-            document.sections[sectionIndex].manualResult = ""
-        } else {
-            document.sections[sectionIndex].resolution = .manual
-            document.sections[sectionIndex].manualResult = ""
-        }
-
-        self.document = document
-        hasUnsavedChanges = true
-    }
-
-    private func resultBinding(for sectionIndex: Int) -> Binding<String> {
-        Binding(
-            get: {
-                guard let document = document else { return "" }
-                return document.sections[sectionIndex].editorText
-            },
-            set: { newValue in
-                guard var document = document else { return }
-                document.sections[sectionIndex].resolution = .manual
-                document.sections[sectionIndex].manualResult = newValue
-                self.document = document
-                hasUnsavedChanges = true
-            }
-        )
-    }
 
     private func resolvedCount(in document: ConflictResolutionDocument) -> Int {
         document.sections.filter { $0.isConflict && $0.resolution != .manual }.count
@@ -433,7 +335,6 @@ struct ConflictMergeToolView: View {
             try await GitStatusService.shared.resolveConflict(file: selectedFile, in: repositoryURL, with: document)
             await MainActor.run {
                 hasUnsavedChanges = false
-                // Move to next file if available
                 if let currentIndex = allConflictFiles.firstIndex(of: selectedFile),
                    currentIndex + 1 < allConflictFiles.count {
                     selectedFile = allConflictFiles[currentIndex + 1]

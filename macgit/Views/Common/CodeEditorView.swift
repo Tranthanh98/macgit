@@ -42,7 +42,8 @@ struct CodeEditorView: NSViewRepresentable {
 
         scrollView.documentView = textView
 
-        // Apply syntax highlighting
+        // Set initial text and highlighting
+        textView.string = text
         applyHighlighting(to: textView)
 
         return scrollView
