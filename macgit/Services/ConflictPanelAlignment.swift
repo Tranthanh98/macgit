@@ -14,26 +14,30 @@ struct ConflictPanelAlignment {
         var currentRows: [ConflictCodeLine] = []
         var resultRows: [ConflictCodeLine] = []
 
-        for section in document.sections {
+        for (sectionIndex, section) in document.sections.enumerated() {
             let incomingLines = Self.lines(of: section.incomingPaneText)
             let currentLines = Self.lines(of: section.currentPaneText)
             let resultLines = Self.lines(of: section.resolvedText)
             let alignedLineCount = max(incomingLines.count, currentLines.count, resultLines.count)
+            let conflictSectionIndex = section.isConflict ? sectionIndex : nil
 
             incomingRows += incomingBuilder.rows(
                 from: incomingLines,
                 alignedLineCount: alignedLineCount,
-                isConflict: section.isConflict
+                isConflict: section.isConflict,
+                conflictSectionIndex: conflictSectionIndex
             )
             currentRows += currentBuilder.rows(
                 from: currentLines,
                 alignedLineCount: alignedLineCount,
-                isConflict: section.isConflict
+                isConflict: section.isConflict,
+                conflictSectionIndex: conflictSectionIndex
             )
             resultRows += resultBuilder.rows(
                 from: resultLines,
                 alignedLineCount: alignedLineCount,
-                isConflict: section.isConflict
+                isConflict: section.isConflict,
+                conflictSectionIndex: conflictSectionIndex
             )
         }
 
@@ -57,20 +61,29 @@ private struct PaneLineBuilder {
     mutating func rows(
         from lines: [String],
         alignedLineCount: Int,
-        isConflict: Bool
+        isConflict: Bool,
+        conflictSectionIndex: Int?
     ) -> [ConflictCodeLine] {
         guard alignedLineCount > 0 else { return [] }
 
         return (0..<alignedLineCount).map { index in
+            let startsConflict = index == 0 && isConflict
+
             guard index < lines.count else {
-                return .placeholder(isConflict: isConflict)
+                return .placeholder(
+                    isConflict: isConflict,
+                    conflictSectionIndex: conflictSectionIndex,
+                    startsConflict: startsConflict
+                )
             }
 
             defer { nextLineNumber += 1 }
             return .actual(
                 lineNumber: nextLineNumber,
                 text: lines[index],
-                isConflict: isConflict
+                isConflict: isConflict,
+                conflictSectionIndex: conflictSectionIndex,
+                startsConflict: startsConflict
             )
         }
     }

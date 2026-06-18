@@ -52,4 +52,51 @@ final class ConflictResolutionModelsTests: XCTestCase {
         XCTAssertEqual(document.sections[0].resolvedText, "alpha\nbeta")
         XCTAssertEqual(document.resolvedText, "alpha\nbeta")
     }
+
+    func testConflictSelectionCanUseCurrentIncomingOrBoth() {
+        var section = ConflictResolutionSection.conflict(
+            current: "current\n",
+            incoming: "incoming\n"
+        )
+
+        XCTAssertTrue(section.isCurrentSelected)
+        XCTAssertFalse(section.isIncomingSelected)
+        XCTAssertEqual(section.resolvedText, "current\n")
+
+        section.setIncomingSelected(true)
+
+        XCTAssertTrue(section.isCurrentSelected)
+        XCTAssertTrue(section.isIncomingSelected)
+        XCTAssertEqual(section.resolution, .both)
+        XCTAssertEqual(section.resolvedText, "current\nincoming\n")
+
+        section.setCurrentSelected(false)
+
+        XCTAssertFalse(section.isCurrentSelected)
+        XCTAssertTrue(section.isIncomingSelected)
+        XCTAssertEqual(section.resolution, .incoming)
+        XCTAssertEqual(section.resolvedText, "incoming\n")
+
+        section.setCurrentSelected(true)
+        section.setIncomingSelected(false)
+
+        XCTAssertTrue(section.isCurrentSelected)
+        XCTAssertFalse(section.isIncomingSelected)
+        XCTAssertEqual(section.resolution, .current)
+        XCTAssertEqual(section.resolvedText, "current\n")
+    }
+
+    func testConflictSelectionCanClearBothSides() {
+        var section = ConflictResolutionSection.conflict(
+            current: "current\n",
+            incoming: "incoming\n"
+        )
+
+        section.setCurrentSelected(false)
+
+        XCTAssertFalse(section.isCurrentSelected)
+        XCTAssertFalse(section.isIncomingSelected)
+        XCTAssertEqual(section.resolution, .manual)
+        XCTAssertEqual(section.resolvedText, "")
+    }
 }

@@ -63,6 +63,37 @@ struct ConflictResolutionSection: Identifiable, Equatable {
         isConflict ? incomingText : contextText
     }
 
+    var isCurrentSelected: Bool {
+        resolution == .current || resolution == .both
+    }
+
+    var isIncomingSelected: Bool {
+        resolution == .incoming || resolution == .both
+    }
+
+    mutating func setCurrentSelected(_ isSelected: Bool) {
+        updateResolution(currentSelected: isSelected, incomingSelected: isIncomingSelected)
+    }
+
+    mutating func setIncomingSelected(_ isSelected: Bool) {
+        updateResolution(currentSelected: isCurrentSelected, incomingSelected: isSelected)
+    }
+
+    private mutating func updateResolution(currentSelected: Bool, incomingSelected: Bool) {
+        manualResult = ""
+
+        switch (currentSelected, incomingSelected) {
+        case (true, true):
+            resolution = .both
+        case (true, false):
+            resolution = .current
+        case (false, true):
+            resolution = .incoming
+        case (false, false):
+            resolution = .manual
+        }
+    }
+
     static func context(_ text: String) -> ConflictResolutionSection {
         ConflictResolutionSection(
             kind: .context,

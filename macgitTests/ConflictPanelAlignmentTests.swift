@@ -27,6 +27,12 @@ final class ConflictPanelAlignmentTests: XCTestCase {
         XCTAssertTrue(panels.incomingRows[4].isPlaceholder)
         XCTAssertEqual(panels.incomingRows[3].text, "")
         XCTAssertEqual(panels.incomingRows[4].text, "")
+        XCTAssertFalse(panels.currentRows[0].startsConflict)
+        XCTAssertTrue(panels.currentRows[2].startsConflict)
+        XCTAssertEqual(panels.currentRows[2].conflictSectionIndex, 1)
+        XCTAssertTrue(panels.incomingRows[2].startsConflict)
+        XCTAssertEqual(panels.incomingRows[2].conflictSectionIndex, 1)
+        XCTAssertFalse(panels.currentRows[3].startsConflict)
     }
 
     func testResultPaneParticipatesInAlignmentWhenItHasMostRows() {

@@ -11,6 +11,9 @@ struct ConflictCodeView: View {
     let highlightColor: Color
     let fontSize: CGFloat
     let rows: [ConflictCodeLine]
+    let selectionSide: ConflictPaneSelectionSide?
+    let isSelected: (Int) -> Bool
+    let onSelectionChanged: (Int, Bool) -> Void
 
     private var rowHeight: CGFloat {
         fontSize + 6
@@ -39,25 +42,52 @@ struct ConflictCodeView: View {
                 isConflict: highlightedLines.contains(lineNumber)
             )
         }
+        self.selectionSide = nil
+        self.isSelected = { _ in false }
+        self.onSelectionChanged = { _, _ in }
     }
 
     init(
         rows: [ConflictCodeLine],
         fileExtension: String,
         highlightColor: Color,
-        fontSize: CGFloat = 12
+        fontSize: CGFloat = 12,
+        selectionSide: ConflictPaneSelectionSide? = nil,
+        isSelected: @escaping (Int) -> Bool = { _ in false },
+        onSelectionChanged: @escaping (Int, Bool) -> Void = { _, _ in }
     ) {
         self.fileExtension = fileExtension
         self.highlightColor = highlightColor
         self.fontSize = fontSize
         self.rows = rows
+        self.selectionSide = selectionSide
+        self.isSelected = isSelected
+        self.onSelectionChanged = onSelectionChanged
     }
 
     var body: some View {
         HStack(spacing: 0) {
+            if selectionSide != nil {
+                selectionControls
+            }
             lineNumbers
             codeContent
         }
+    }
+
+    // MARK: - Selection Controls
+
+    private var selectionControls: some View {
+        VStack(alignment: .center, spacing: 0) {
+            ForEach(rows.indices, id: \.self) { index in
+                let row = rows[index]
+                selectionControl(for: row)
+                    .frame(width: 28, height: rowHeight)
+                    .background(rowBackground(for: row))
+            }
+        }
+        .padding(.vertical, 8)
+        .background(.secondary.opacity(0.05))
     }
 
     // MARK: - Line Numbers
@@ -100,6 +130,28 @@ struct ConflictCodeView: View {
     }
 
     // MARK: - Helpers
+
+    @ViewBuilder
+    private func selectionControl(for row: ConflictCodeLine) -> some View {
+        if let selectionSide,
+           let conflictSectionIndex = row.conflictSectionIndex,
+           row.startsConflict {
+            let selected = isSelected(conflictSectionIndex)
+
+            Button(
+                "\(selectionSide.title) conflict block",
+                systemImage: selected ? "checkmark.square.fill" : "square"
+            ) {
+                onSelectionChanged(conflictSectionIndex, !selected)
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.plain)
+            .foregroundStyle(selected ? Color.accentColor : .secondary)
+            .accessibilityValue(selected ? "Selected" : "Not selected")
+        } else {
+            Color.clear
+        }
+    }
 
     private func attributedText(
         for row: ConflictCodeLine,

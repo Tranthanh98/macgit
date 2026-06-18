@@ -122,6 +122,7 @@ struct ConflictMergeToolView: View {
                 panelView(
                     title: "Incoming",
                     scrollID: "incoming",
+                    selectionSide: .incoming,
                     data: incomingData,
                     highlightColor: Color(nsColor: .systemGreen).opacity(0.7)
                 )
@@ -132,6 +133,7 @@ struct ConflictMergeToolView: View {
                 panelView(
                     title: "Current",
                     scrollID: "current",
+                    selectionSide: .current,
                     data: currentData,
                     highlightColor: Color(nsColor: .systemBlue).opacity(0.7)
                 )
@@ -145,6 +147,7 @@ struct ConflictMergeToolView: View {
             panelView(
                 title: "Result",
                 scrollID: "result",
+                selectionSide: nil,
                 data: resultData,
                 highlightColor: Color(nsColor: .systemPurple).opacity(0.7)
             )
@@ -155,6 +158,7 @@ struct ConflictMergeToolView: View {
     private func panelView(
         title: String,
         scrollID: String,
+        selectionSide: ConflictPaneSelectionSide?,
         data: PanelData,
         highlightColor: Color
     ) -> some View {
@@ -180,7 +184,16 @@ struct ConflictMergeToolView: View {
                 ConflictCodeView(
                     rows: data.rows,
                     fileExtension: selectedFile.fileExtension,
-                    highlightColor: highlightColor
+                    highlightColor: highlightColor,
+                    selectionSide: selectionSide,
+                    isSelected: { sectionIndex in
+                        guard let selectionSide else { return false }
+                        return isConflictSideSelected(selectionSide, sectionIndex: sectionIndex)
+                    },
+                    onSelectionChanged: { sectionIndex, isSelected in
+                        guard let selectionSide else { return }
+                        setConflictSide(selectionSide, selected: isSelected, sectionIndex: sectionIndex)
+                    }
                 )
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -296,6 +309,46 @@ struct ConflictMergeToolView: View {
         guard let currentIndex = conflictIndices.firstIndex(of: selectedConflictIndex) else { return }
         let nextIndex = min(conflictIndices.count - 1, currentIndex + 1)
         selectedConflictIndex = conflictIndices[nextIndex]
+    }
+
+    private func isConflictSideSelected(
+        _ side: ConflictPaneSelectionSide,
+        sectionIndex: Int
+    ) -> Bool {
+        guard let document,
+              document.sections.indices.contains(sectionIndex),
+              document.sections[sectionIndex].isConflict else {
+            return false
+        }
+
+        let section = document.sections[sectionIndex]
+        switch side {
+        case .incoming:
+            return section.isIncomingSelected
+        case .current:
+            return section.isCurrentSelected
+        }
+    }
+
+    private func setConflictSide(
+        _ side: ConflictPaneSelectionSide,
+        selected: Bool,
+        sectionIndex: Int
+    ) {
+        guard var document, document.sections.indices.contains(sectionIndex) else {
+            return
+        }
+
+        switch side {
+        case .incoming:
+            document.sections[sectionIndex].setIncomingSelected(selected)
+        case .current:
+            document.sections[sectionIndex].setCurrentSelected(selected)
+        }
+
+        selectedConflictIndex = sectionIndex
+        hasUnsavedChanges = true
+        self.document = document
     }
 
     private func loadDocument(for file: StatusFile) async {
