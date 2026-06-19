@@ -11,6 +11,7 @@ struct FileStatusView: View {
 
     @State private var gitStatus: GitStatus = GitStatus(staged: [], unstaged: [], untracked: [])
     @State private var selectedFile: StatusFile? = nil
+    @State private var selectedActionFileKeys: Set<FileStatusSelectionKey> = []
     @State private var diffHunks: [DiffHunk] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -38,6 +39,14 @@ struct FileStatusView: View {
 
     private var canCommit: Bool {
         !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !gitStatus.staged.isEmpty
+    }
+
+    private var actionSelection: FileStatusActionSelection {
+        FileStatusActionSelection(
+            selectedKeys: selectedActionFileKeys,
+            stagedFiles: gitStatus.staged,
+            changedFiles: changedFiles
+        )
     }
 
     var body: some View {
@@ -127,8 +136,14 @@ struct FileStatusView: View {
                             .foregroundStyle(.secondary)
                             .textCase(.none)
                         Spacer()
-                        Button("Unstage All") {
-                            Task { await unstageAll() }
+                        Button(actionSelection.title(for: .staged)) {
+                            Task {
+                                if actionSelection.selectedStagedFiles.isEmpty {
+                                    await unstageAll()
+                                } else {
+                                    await unstageSelected()
+                                }
+                            }
                         }
                         .buttonStyle(GlassButtonStyle(tint: .yellow, fontSize: 10))
                     }
@@ -149,8 +164,14 @@ struct FileStatusView: View {
                             .foregroundStyle(.secondary)
                             .textCase(.none)
                         Spacer()
-                        Button("Stage All") {
-                            Task { await stageAll() }
+                        Button(actionSelection.title(for: .changed)) {
+                            Task {
+                                if actionSelection.selectedChangedFiles.isEmpty {
+                                    await stageAll()
+                                } else {
+                                    await stageSelected()
+                                }
+                            }
                         }
                         .buttonStyle(GlassButtonStyle(tint: .accentColor, fontSize: 10))
                     }
@@ -162,17 +183,17 @@ struct FileStatusView: View {
     }
 
     private func fileRow(file: StatusFile, isStaged: Bool) -> some View {
-        HStack(spacing: 0) {
+        let selectionKey = FileStatusSelectionKey(file: file, isStaged: isStaged)
+
+        return HStack(spacing: 0) {
             HStack(spacing: 10) {
                 Toggle("", isOn: Binding(
-                    get: { isStaged },
-                    set: { newValue in
-                        Task {
-                            if newValue {
-                                await stage(file: file)
-                            } else {
-                                await unstage(file: file)
-                            }
+                    get: { selectedActionFileKeys.contains(selectionKey) },
+                    set: { isSelected in
+                        if isSelected {
+                            selectedActionFileKeys.insert(selectionKey)
+                        } else {
+                            selectedActionFileKeys.remove(selectionKey)
                         }
                     }
                 ))
@@ -219,20 +240,45 @@ struct FileStatusView: View {
     }
 
     private func moreButton(file: StatusFile, isStaged: Bool) -> some View {
-        Menu {
+        let selection = actionSelection
+
+        return Menu {
             Button("Open") { openFile(file: file) }
+                .disabled(selection.isSingleFileActionDisabled)
             Button("Show in Finder") { showInFinder(file: file) }
+                .disabled(selection.isSingleFileActionDisabled)
             Divider()
 
             if isStaged {
-                Button("Unstage") { Task { await unstage(file: file) } }
-                Button("Remove") { Task { await remove(file: file) } }
+                Button(selection.title(for: .unstage)) {
+                    Task {
+                        await unstage(files: selection.files(for: .unstage, fallback: file))
+                    }
+                }
+                Button(selection.title(for: .remove)) {
+                    Task {
+                        await remove(files: selection.files(for: .remove, fallback: file))
+                    }
+                }
             } else {
-                Button("Stage") { Task { await stage(file: file) } }
-                Button("Discard") { Task { await discard(file: file) } }
-                Button("Remove") { Task { await remove(file: file) } }
+                Button(selection.title(for: .stage)) {
+                    Task {
+                        await stage(files: selection.files(for: .stage, fallback: file))
+                    }
+                }
+                Button(selection.title(for: .discard)) {
+                    Task {
+                        await discard(files: selection.files(for: .discard, fallback: file))
+                    }
+                }
+                Button(selection.title(for: .remove)) {
+                    Task {
+                        await remove(files: selection.files(for: .remove, fallback: file))
+                    }
+                }
                 if file.status == .untracked || file.status == .added {
                     Button("Ignore") { ignoreTargetFile = file }
+                        .disabled(selection.isSingleFileActionDisabled)
                 }
             }
 
@@ -240,6 +286,7 @@ struct FileStatusView: View {
 
             if !isStaged {
                 Button("Reset") { Task { await discard(file: file) } }
+                    .disabled(selection.isSingleFileActionDisabled)
 
                 if !recentCommits.isEmpty {
                     Menu("Reset to Commit...") {
@@ -249,6 +296,7 @@ struct FileStatusView: View {
                             }
                         }
                     }
+                    .disabled(selection.isSingleFileActionDisabled)
                 }
 
                 if file.status == .conflict {
@@ -263,6 +311,7 @@ struct FileStatusView: View {
                             openConflictResolverWindow(for: file)
                         }
                     }
+                    .disabled(selection.isSingleFileActionDisabled)
                 }
             }
         } label: {
@@ -278,19 +327,44 @@ struct FileStatusView: View {
 
     @ViewBuilder
     private func fileContextMenu(file: StatusFile, isStaged: Bool) -> some View {
+        let selection = actionSelection
+
         Button("Open") { openFile(file: file) }
+            .disabled(selection.isSingleFileActionDisabled)
         Button("Show in Finder") { showInFinder(file: file) }
+            .disabled(selection.isSingleFileActionDisabled)
         Divider()
 
         if isStaged {
-            Button("Unstage") { Task { await unstage(file: file) } }
-            Button("Remove") { Task { await remove(file: file) } }
+            Button(selection.title(for: .unstage)) {
+                Task {
+                    await unstage(files: selection.files(for: .unstage, fallback: file))
+                }
+            }
+            Button(selection.title(for: .remove)) {
+                Task {
+                    await remove(files: selection.files(for: .remove, fallback: file))
+                }
+            }
         } else {
-            Button("Stage") { Task { await stage(file: file) } }
-            Button("Discard") { Task { await discard(file: file) } }
-            Button("Remove") { Task { await remove(file: file) } }
+            Button(selection.title(for: .stage)) {
+                Task {
+                    await stage(files: selection.files(for: .stage, fallback: file))
+                }
+            }
+            Button(selection.title(for: .discard)) {
+                Task {
+                    await discard(files: selection.files(for: .discard, fallback: file))
+                }
+            }
+            Button(selection.title(for: .remove)) {
+                Task {
+                    await remove(files: selection.files(for: .remove, fallback: file))
+                }
+            }
             if file.status == .untracked || file.status == .added {
                 Button("Ignore") { ignoreTargetFile = file }
+                    .disabled(selection.isSingleFileActionDisabled)
             }
         }
 
@@ -298,6 +372,7 @@ struct FileStatusView: View {
 
         if !isStaged {
             Button("Reset") { Task { await discard(file: file) } }
+                .disabled(selection.isSingleFileActionDisabled)
 
             if !recentCommits.isEmpty {
                 Menu("Reset to Commit...") {
@@ -307,6 +382,7 @@ struct FileStatusView: View {
                         }
                     }
                 }
+                .disabled(selection.isSingleFileActionDisabled)
             }
 
             if file.status == .conflict {
@@ -321,6 +397,7 @@ struct FileStatusView: View {
                         openConflictResolverWindow(for: file)
                     }
                 }
+                .disabled(selection.isSingleFileActionDisabled)
             }
         }
     }
@@ -528,7 +605,7 @@ struct FileStatusView: View {
             if pushAfterCommit {
                 let branch = await GitStatusService.shared.currentBranch(in: repositoryURL) ?? ""
                 let options = GitStatusService.PushOptions(remote: "origin", branches: [branch], pushTags: false)
-                try await GitStatusService.shared.push(options: options, in: repositoryURL)
+                _ = try await GitStatusService.shared.push(options: options, in: repositoryURL)
             }
             await MainActor.run {
                 commitMessage = ""
@@ -632,6 +709,8 @@ struct FileStatusView: View {
                     }
                 }
             }
+
+            selectedActionFileKeys = actionSelection.prunedSelection
         } catch {
             errorMessage = error.localizedDescription
             showingError = true
@@ -647,8 +726,13 @@ struct FileStatusView: View {
     }
 
     private func stage(file: StatusFile) async {
+        await stage(files: [file])
+    }
+
+    private func stage(files: [StatusFile]) async {
+        guard !files.isEmpty else { return }
         do {
-            try await GitStatusService.shared.stage(file: file, in: repositoryURL)
+            try await GitStatusService.shared.stageAll(files: files, in: repositoryURL)
             await loadStatus()
             await syncState?.refresh(repositoryURL: repositoryURL)
         } catch {
@@ -658,8 +742,13 @@ struct FileStatusView: View {
     }
 
     private func unstage(file: StatusFile) async {
+        await unstage(files: [file])
+    }
+
+    private func unstage(files: [StatusFile]) async {
+        guard !files.isEmpty else { return }
         do {
-            try await GitStatusService.shared.unstage(file: file, in: repositoryURL)
+            try await GitStatusService.shared.unstageAll(files: files, in: repositoryURL)
             await loadStatus()
             await syncState?.refresh(repositoryURL: repositoryURL)
         } catch {
@@ -679,23 +768,28 @@ struct FileStatusView: View {
     }
 
     private func stageAll() async {
-        guard !changedFiles.isEmpty else { return }
-        do {
-            try await GitStatusService.shared.stageAll(files: changedFiles, in: repositoryURL)
-            await loadStatus()
-            await syncState?.refresh(repositoryURL: repositoryURL)
-        } catch {
-            errorMessage = error.localizedDescription
-            showingError = true
-        }
+        await stage(files: changedFiles)
     }
 
     private func unstageAll() async {
-        guard !gitStatus.staged.isEmpty else { return }
+        await unstage(files: gitStatus.staged)
+    }
+
+    private func stageSelected() async {
+        await stage(files: actionSelection.selectedChangedFiles)
+    }
+
+    private func unstageSelected() async {
+        await unstage(files: actionSelection.selectedStagedFiles)
+    }
+
+    private func discard(files: [StatusFile]) async {
+        guard !files.isEmpty else { return }
         do {
-            try await GitStatusService.shared.unstageAll(files: gitStatus.staged, in: repositoryURL)
+            for file in files {
+                try await GitStatusService.shared.discard(file: file, in: repositoryURL)
+            }
             await loadStatus()
-            await syncState?.refresh(repositoryURL: repositoryURL)
         } catch {
             errorMessage = error.localizedDescription
             showingError = true
@@ -713,8 +807,15 @@ struct FileStatusView: View {
     }
 
     private func discard(file: StatusFile) async {
+        await discard(files: [file])
+    }
+
+    private func remove(files: [StatusFile]) async {
+        guard !files.isEmpty else { return }
         do {
-            try await GitStatusService.shared.discard(file: file, in: repositoryURL)
+            for file in files {
+                try await GitStatusService.shared.remove(file: file, in: repositoryURL)
+            }
             await loadStatus()
         } catch {
             errorMessage = error.localizedDescription
@@ -723,13 +824,7 @@ struct FileStatusView: View {
     }
 
     private func remove(file: StatusFile) async {
-        do {
-            try await GitStatusService.shared.remove(file: file, in: repositoryURL)
-            await loadStatus()
-        } catch {
-            errorMessage = error.localizedDescription
-            showingError = true
-        }
+        await remove(files: [file])
     }
 
     private func confirmIgnore(file: StatusFile, pattern: String) async {
