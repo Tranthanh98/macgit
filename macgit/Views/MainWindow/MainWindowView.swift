@@ -32,6 +32,7 @@ struct MainWindowView: View {
     @State private var pendingStashRef: String?
     @State private var pendingStashAction: StashAction?
     @StateObject private var syncState = SyncState()
+    @StateObject private var undoManager = GitUndoManager()
     @State private var repoIconName: String = "code-branch"
     @State private var remoteURLString: String = ""
     @State private var selectedBranchName: String? = nil
@@ -225,7 +226,11 @@ struct MainWindowView: View {
 
             switch selectedItem {
             case .item(.fileStatus):
-                FileStatusView(repositoryURL: repositoryURL, syncState: syncState)
+                FileStatusView(
+                    repositoryURL: repositoryURL,
+                    syncState: syncState,
+                    undoManager: undoManager
+                )
             case .item(.history), .branch, .tag, .remoteBranch, .head:
                 HistoryView(repositoryURL: repositoryURL, selectedBranch: selectedBranchName)
             case .stash(let ref):
