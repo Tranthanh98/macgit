@@ -73,6 +73,21 @@ struct GitUndoExecutor {
             _ = try await runner.runGit(arguments: ["stash", "store", "-m", message, commit], in: repositoryURL)
         case .stashDropMatchingHash(let hash):
             try await stashSupport.dropStash(matchingHash: hash, in: repositoryURL)
+        case .sequence(let operations):
+            for operation in operations {
+                try await execute(operation, in: repositoryURL)
+            }
+        case .resetHardToHead(let expectedHead):
+            if let expectedHead {
+                let actual = try await runner.runGit(arguments: ["rev-parse", "HEAD"], in: repositoryURL)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard actual == expectedHead else {
+                    throw GitUndoError.expectedHeadMismatch(expected: expectedHead, actual: actual)
+                }
+            }
+            _ = try await runner.runGit(arguments: ["reset", "--hard", "HEAD"], in: repositoryURL)
+        case .stashPop(let ref):
+            _ = try await runner.runGit(arguments: ["stash", "pop", ref], in: repositoryURL)
         }
     }
 

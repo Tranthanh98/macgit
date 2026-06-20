@@ -52,4 +52,20 @@ struct GitStashUndoSupport {
 
         _ = try await runner.runGit(arguments: ["stash", "drop", ref], in: repositoryURL)
     }
+
+    func isWorkingTreeClean(in repositoryURL: URL) async throws -> Bool {
+        let output = try await runner.runGit(
+            arguments: ["status", "--porcelain", "--untracked-files=all"],
+            in: repositoryURL
+        )
+        return output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func stashHasUntrackedPayload(ref: String, in repositoryURL: URL) async throws -> Bool {
+        let output = try await runner.runGit(
+            arguments: ["stash", "show", "--only-untracked", "--name-only", ref],
+            in: repositoryURL
+        )
+        return !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }

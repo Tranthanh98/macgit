@@ -38,7 +38,7 @@ If any condition fails, macgit performs the apply/pop action without registering
 - Modify: `macgit/Services/GitStashUndoSupport.swift`
 - Create: `macgitTests/GitUndoStashApplyPopTests.swift`
 
-- [ ] **Step 1: Add failing safety tests**
+- [x] **Step 1: Add failing safety tests**
 
 Create `macgitTests/GitUndoStashApplyPopTests.swift`:
 
@@ -96,7 +96,7 @@ final class GitUndoStashApplyPopTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -106,7 +106,7 @@ xcodebuild test -project macgit.xcodeproj -scheme macgit -destination 'platform=
 
 Expected: compilation fails with `value of type 'GitStashUndoSupport' has no member 'isWorkingTreeClean'`.
 
-- [ ] **Step 3: Add safety helpers**
+- [x] **Step 3: Add safety helpers**
 
 In `macgit/Services/GitStashUndoSupport.swift`, add:
 
@@ -128,7 +128,7 @@ func stashHasUntrackedPayload(ref: String, in repositoryURL: URL) async throws -
 }
 ```
 
-- [ ] **Step 4: Run safety tests**
+- [x] **Step 4: Run safety tests**
 
 Run:
 
@@ -138,7 +138,7 @@ xcodebuild test -project macgit.xcodeproj -scheme macgit -destination 'platform=
 
 Expected: current safety tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -156,7 +156,7 @@ Expected: commit succeeds.
 - Modify: `macgit/Services/GitUndoExecutor.swift`
 - Modify: `macgitTests/GitUndoStashApplyPopTests.swift`
 
-- [ ] **Step 1: Extend models**
+- [x] **Step 1: Extend models**
 
 In `macgit/Services/GitUndoModels.swift`, change:
 
@@ -178,7 +178,7 @@ case resetHardToHead(expectedHead: String?)
 case stashPop(ref: String)
 ```
 
-- [ ] **Step 2: Extend executor**
+- [x] **Step 2: Extend executor**
 
 In `GitUndoExecutor.execute(_:in:)`, add:
 
@@ -200,7 +200,7 @@ case .stashPop(let ref):
     _ = try await runner.runGit(arguments: ["stash", "pop", ref], in: repositoryURL)
 ```
 
-- [ ] **Step 3: Append real apply/pop undo tests**
+- [x] **Step 3: Append real apply/pop undo tests**
 
 Append these tests to `GitUndoStashApplyPopTests`:
 
@@ -266,7 +266,7 @@ private func runGitOutput(_ arguments: [String], in repositoryURL: URL) throws -
 }
 ```
 
-- [ ] **Step 4: Run stash apply/pop tests**
+- [x] **Step 4: Run stash apply/pop tests**
 
 Run:
 
@@ -276,7 +276,7 @@ xcodebuild test -project macgit.xcodeproj -scheme macgit -destination 'platform=
 
 Expected: tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -292,7 +292,7 @@ Expected: commit succeeds.
 **Files:**
 - Modify: `macgit/Views/MainWindow/MainWindowView.swift`
 
-- [ ] **Step 1: Add a safe-registration helper**
+- [x] **Step 1: Add a safe-registration helper**
 
 In `MainWindowView`, add:
 
@@ -318,7 +318,7 @@ private func canRegisterStashApplyUndo(ref: String) async -> Bool {
 }
 ```
 
-- [ ] **Step 2: Register apply undo**
+- [x] **Step 2: Register apply undo**
 
 In `performStashAction`, inside `case .apply`, before calling `GitStatusService.shared.applyStash`, add:
 
@@ -354,7 +354,7 @@ if canUndo, let head {
 }
 ```
 
-- [ ] **Step 3: Build and run tests**
+- [x] **Step 3: Build and run tests**
 
 Run:
 
@@ -365,7 +365,7 @@ xcodebuild build -project macgit.xcodeproj -scheme macgit -destination 'platform
 
 Expected: tests pass and app builds.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 Run:
 
