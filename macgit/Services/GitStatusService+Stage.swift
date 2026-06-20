@@ -74,7 +74,7 @@ extension GitStatusService {
 
     // MARK: - Patch Helpers
 
-    private func applyPatch(_ patch: String, in repositoryURL: URL, cached: Bool = false, reverse: Bool = false) async throws {
+    func applyPatch(_ patch: String, in repositoryURL: URL, cached: Bool = false, reverse: Bool = false) async throws {
         var arguments = ["apply"]
         if cached { arguments.append("--cached") }
         if reverse { arguments.append("--reverse") }

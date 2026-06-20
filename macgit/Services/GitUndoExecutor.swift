@@ -18,9 +18,14 @@ enum GitUndoError: LocalizedError, Equatable {
 
 struct GitUndoExecutor {
     private let runner: any GitCommandRunning
+    private let patchRunner: any GitPatchApplying
 
-    init(runner: any GitCommandRunning = GitStatusService.shared) {
+    init(
+        runner: any GitCommandRunning = GitStatusService.shared,
+        patchRunner: any GitPatchApplying = GitStatusService.shared
+    ) {
         self.runner = runner
+        self.patchRunner = patchRunner
     }
 
     func execute(_ operation: GitUndoOperation, in repositoryURL: URL) async throws {
@@ -29,6 +34,8 @@ struct GitUndoExecutor {
             try await runFileCommand(["add", "--"], paths: paths, in: repositoryURL)
         case .unstageFiles(let paths):
             try await runFileCommand(["reset", "HEAD", "--"], paths: paths, in: repositoryURL)
+        case .applyPatch(let patch, let cached, let reverse):
+            try await patchRunner.applyPatch(patch, in: repositoryURL, cached: cached, reverse: reverse)
         }
     }
 

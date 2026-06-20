@@ -10,6 +10,7 @@ import SwiftUI
 enum GitUndoOperation: Equatable {
     case stageFiles(paths: [String])
     case unstageFiles(paths: [String])
+    case applyPatch(patch: String, cached: Bool, reverse: Bool)
 }
 
 struct GitUndoEntry: Identifiable, Equatable {
