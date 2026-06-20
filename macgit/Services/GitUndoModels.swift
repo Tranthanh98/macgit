@@ -87,6 +87,22 @@ enum GitUndoEntryFactory {
         )
     }
 
+    static func commit(
+        repositoryURL: URL,
+        oldHead: String,
+        newHead: String,
+        message: String,
+        noVerify: Bool,
+        signOff: Bool
+    ) -> GitUndoEntry {
+        GitUndoEntry(
+            repositoryURL: repositoryURL,
+            label: "Commit",
+            undoOperation: .resetHead(target: oldHead, mode: .soft, expectedHead: newHead),
+            redoOperation: .commit(message: message, noVerify: noVerify, signOff: signOff)
+        )
+    }
+
     private static func normalized(_ paths: [String]) -> [String] {
         var seen: Set<String> = []
         var result: [String] = []
