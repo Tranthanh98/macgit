@@ -83,19 +83,19 @@ Tower-style Git Undo, implemented phase-by-phase. Shared types created in Phase 
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| 0 + 1A | Undo/redo infra + file-level stage/unstage | Code-complete on `codex/git-undo-phase-0-1a` (worktree) |
-| 1B | Hunk/line stage undo | Code-complete on `codex/git-undo-phase-1b` (worktree) |
-| 2 | Commit undo | Code-complete on `codex/git-undo-phase-2` (worktree) |
-| 3A | Stash save/drop undo | Planned (not started) |
-| 3B | Stash apply/pop undo | Planned (not started) |
-| 4 | Local branch actions undo | Planned (not started) |
-| 5 | Discard/remove undo (`.git/macgit/undo` backups) | Code-complete on `codex/git-undo-phase-5` (worktree) |
-| 6 | History actions (cherry-pick/revert/reset/merge/rebase) | Planned (not started) |
+| 0 + 1A | Undo/redo infra + file-level stage/unstage | Merged to `main` |
+| 1B | Hunk/line stage undo | Merged to `main` |
+| 2 | Commit undo | Merged to `main` |
+| 3A | Stash save/drop undo | Merged to `main` |
+| 3B | Stash apply/pop undo | Merged to `main` |
+| 4 | Local branch actions undo | Merged to `main` |
+| 5 | Discard/remove undo (`.git/macgit/undo` backups) | Merged to `main` at `0115a7f` |
+| 6 | History actions (cherry-pick/revert/reset/merge/rebase) | Planned (ready to branch from latest `main`) |
 | 7 | Remote actions (pull rollback, published branch removal) | Planned (not started) |
 
 **Shared rules for every phase** (from the roadmap): undo entries are registered only after the original Git action succeeds; every undo/redo refreshes `SyncState` and posts `.repositoryDidChange`; destructive inverses check an expected state before running; if a precondition fails the popped entry is restored and an error is shown; undo stacks are not persisted across app launches.
 
-> Note: the `main` branch currently contains only the Git Undo plan/roadmap docs, not the implementation code. The code lives on the phase branches listed above until merged.
+> Note: `main` now contains the merged Git Undo implementation through Phase 5. Active phase work should still happen on isolated `codex/<phase>` branches and merge back only after tests pass.
 
 ---
 
