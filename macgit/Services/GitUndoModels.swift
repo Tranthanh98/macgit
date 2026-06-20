@@ -27,6 +27,11 @@ enum GitUndoOperation: Equatable {
     case applyPatch(patch: String, cached: Bool, reverse: Bool)
     case resetHead(target: String, mode: GitUndoResetMode, expectedHead: String?)
     case commit(message: String, noVerify: Bool, signOff: Bool)
+    case stashPush(message: String, keepIndex: Bool)
+    case stashApply(ref: String)
+    case stashApplyAndDrop(hash: String)
+    case stashStore(commit: String, message: String)
+    case stashDropMatchingHash(hash: String)
 }
 
 struct GitUndoEntry: Identifiable, Equatable {
