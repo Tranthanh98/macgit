@@ -22,13 +22,17 @@ enum GitUndoError: LocalizedError, Equatable {
 struct GitUndoExecutor {
     private let runner: any GitCommandRunning
     private let patchRunner: any GitPatchApplying
+    private let stashSupport: GitStashUndoSupport
 
     init(
-        runner: any GitCommandRunning = GitStatusService.shared,
-        patchRunner: any GitPatchApplying = GitStatusService.shared
+        runner: (any GitCommandRunning)? = nil,
+        patchRunner: (any GitPatchApplying)? = nil,
+        stashSupport: GitStashUndoSupport? = nil
     ) {
-        self.runner = runner
-        self.patchRunner = patchRunner
+        let resolvedRunner = runner ?? GitStatusService.shared
+        self.runner = resolvedRunner
+        self.patchRunner = patchRunner ?? GitStatusService.shared
+        self.stashSupport = stashSupport ?? GitStashUndoSupport(runner: resolvedRunner)
     }
 
     func execute(_ operation: GitUndoOperation, in repositoryURL: URL) async throws {
@@ -53,6 +57,37 @@ struct GitUndoExecutor {
             if noVerify { arguments.append("--no-verify") }
             if signOff { arguments.append("--signoff") }
             _ = try await runner.runGit(arguments: arguments, in: repositoryURL)
+        case .stashPush(let message, let keepIndex):
+            var arguments = ["stash", "push"]
+            if keepIndex { arguments.append("--keep-index") }
+            if !message.isEmpty {
+                arguments.append(contentsOf: ["-m", message])
+            }
+            _ = try await runner.runGit(arguments: arguments, in: repositoryURL)
+        case .stashApply(let ref):
+            _ = try await runner.runGit(arguments: ["stash", "apply", ref], in: repositoryURL)
+        case .stashApplyAndDrop(let hash):
+            _ = try await runner.runGit(arguments: ["stash", "apply", hash], in: repositoryURL)
+            try await stashSupport.dropStash(matchingHash: hash, in: repositoryURL)
+        case .stashStore(let commit, let message):
+            _ = try await runner.runGit(arguments: ["stash", "store", "-m", message, commit], in: repositoryURL)
+        case .stashDropMatchingHash(let hash):
+            try await stashSupport.dropStash(matchingHash: hash, in: repositoryURL)
+        case .sequence(let operations):
+            for operation in operations {
+                try await execute(operation, in: repositoryURL)
+            }
+        case .resetHardToHead(let expectedHead):
+            if let expectedHead {
+                let actual = try await runner.runGit(arguments: ["rev-parse", "HEAD"], in: repositoryURL)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard actual == expectedHead else {
+                    throw GitUndoError.expectedHeadMismatch(expected: expectedHead, actual: actual)
+                }
+            }
+            _ = try await runner.runGit(arguments: ["reset", "--hard", "HEAD"], in: repositoryURL)
+        case .stashPop(let ref):
+            _ = try await runner.runGit(arguments: ["stash", "pop", ref], in: repositoryURL)
         }
     }
 

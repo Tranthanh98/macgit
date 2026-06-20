@@ -355,7 +355,11 @@ struct MainWindowView: View {
     private var stashSheet: some View {
         StashSheetView { options in
             Task {
-                await syncState.performStash(options: options, repositoryURL: repositoryURL)
+                await syncState.performStash(
+                    options: options,
+                    repositoryURL: repositoryURL,
+                    undoManager: undoManager
+                )
             }
         }
     }
@@ -542,13 +546,52 @@ struct MainWindowView: View {
         do {
             switch action {
             case .apply:
+                let support = GitStashUndoSupport()
+                let canRegisterUndo = await canRegisterStashApplyUndo(ref: ref)
+                let head = canRegisterUndo ? await GitStatusService.shared.tipHash(for: "HEAD", in: repositoryURL) : nil
+                let hash = canRegisterUndo ? try await support.hash(for: ref, in: repositoryURL) : nil
+                let summary = canRegisterUndo ? try await support.summary(for: ref, in: repositoryURL) : nil
                 try await GitStatusService.shared.applyStash(
                     ref: ref,
                     dropAfterApplying: deleteAfterApplying,
                     in: repositoryURL
                 )
+                if canRegisterUndo, let head, let hash, let summary {
+                    let undoOperation: GitUndoOperation
+                    if deleteAfterApplying {
+                        undoOperation = .sequence([
+                            .resetHardToHead(expectedHead: head),
+                            .stashStore(commit: hash, message: summary)
+                        ])
+                    } else {
+                        undoOperation = .resetHardToHead(expectedHead: head)
+                    }
+                    await MainActor.run {
+                        undoManager.register(
+                            GitUndoEntry(
+                                repositoryURL: repositoryURL,
+                                label: deleteAfterApplying ? "Pop stash" : "Apply stash",
+                                undoOperation: undoOperation,
+                                redoOperation: deleteAfterApplying ? .stashPop(ref: ref) : .stashApply(ref: hash)
+                            )
+                        )
+                    }
+                }
             case .delete:
+                let support = GitStashUndoSupport()
+                let hash = try await support.hash(for: ref, in: repositoryURL)
+                let summary = try await support.summary(for: ref, in: repositoryURL)
                 try await GitStatusService.shared.dropStash(ref: ref, in: repositoryURL)
+                await MainActor.run {
+                    undoManager.register(
+                        GitUndoEntry(
+                            repositoryURL: repositoryURL,
+                            label: "Drop stash",
+                            undoOperation: .stashStore(commit: hash, message: summary),
+                            redoOperation: .stashDropMatchingHash(hash: hash)
+                        )
+                    )
+                }
             }
             await syncState.refresh(repositoryURL: repositoryURL)
             NotificationCenter.default.post(
@@ -562,6 +605,26 @@ struct MainWindowView: View {
 
         await MainActor.run {
             clearPendingStashAction()
+        }
+    }
+
+    private func canRegisterStashApplyUndo(ref: String) async -> Bool {
+        let support = GitStashUndoSupport()
+        do {
+            let clean = try await support.isWorkingTreeClean(in: repositoryURL)
+            let hasUntrackedPayload = try await support.stashHasUntrackedPayload(ref: ref, in: repositoryURL)
+            if !clean || hasUntrackedPayload {
+                await MainActor.run {
+                    syncState.showInfo("Stash action completed without undo because the working tree or stash payload is not clean enough for a safe reset.")
+                }
+                return false
+            }
+            return true
+        } catch {
+            await MainActor.run {
+                syncState.showError(error.localizedDescription)
+            }
+            return false
         }
     }
 

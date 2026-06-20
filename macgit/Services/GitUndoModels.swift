@@ -21,12 +21,20 @@ enum GitUndoResetMode: Equatable {
     }
 }
 
-enum GitUndoOperation: Equatable {
+indirect enum GitUndoOperation: Equatable {
     case stageFiles(paths: [String])
     case unstageFiles(paths: [String])
     case applyPatch(patch: String, cached: Bool, reverse: Bool)
     case resetHead(target: String, mode: GitUndoResetMode, expectedHead: String?)
     case commit(message: String, noVerify: Bool, signOff: Bool)
+    case stashPush(message: String, keepIndex: Bool)
+    case stashApply(ref: String)
+    case stashApplyAndDrop(hash: String)
+    case stashStore(commit: String, message: String)
+    case stashDropMatchingHash(hash: String)
+    case sequence([GitUndoOperation])
+    case resetHardToHead(expectedHead: String?)
+    case stashPop(ref: String)
 }
 
 struct GitUndoEntry: Identifiable, Equatable {

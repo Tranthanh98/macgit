@@ -39,7 +39,7 @@ This phase does not support undo for stash apply or stash pop.
 - Create: `macgit/Services/GitStashUndoSupport.swift`
 - Create: `macgitTests/GitStashUndoSupportTests.swift`
 
-- [ ] **Step 1: Write failing stash support tests**
+- [x] **Step 1: Write failing stash support tests**
 
 Create `macgitTests/GitStashUndoSupportTests.swift`:
 
@@ -93,7 +93,7 @@ final class GitStashUndoSupportTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify failure**
+- [x] **Step 2: Run tests to verify failure**
 
 Run:
 
@@ -103,7 +103,7 @@ xcodebuild test -project macgit.xcodeproj -scheme macgit -destination 'platform=
 
 Expected: compilation fails with `cannot find 'GitStashUndoSupport' in scope`.
 
-- [ ] **Step 3: Create stash support helper**
+- [x] **Step 3: Create stash support helper**
 
 Create `macgit/Services/GitStashUndoSupport.swift`:
 
@@ -160,7 +160,7 @@ struct GitStashUndoSupport {
 }
 ```
 
-- [ ] **Step 4: Run stash support tests**
+- [x] **Step 4: Run stash support tests**
 
 Run:
 
@@ -170,7 +170,7 @@ xcodebuild test -project macgit.xcodeproj -scheme macgit -destination 'platform=
 
 Expected: tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -188,7 +188,7 @@ Expected: commit succeeds.
 - Modify: `macgit/Services/GitUndoExecutor.swift`
 - Create: `macgitTests/GitUndoStashSaveDropTests.swift`
 
-- [ ] **Step 1: Extend undo operation enum**
+- [x] **Step 1: Extend undo operation enum**
 
 In `macgit/Services/GitUndoModels.swift`, add these cases to `GitUndoOperation`:
 
@@ -200,7 +200,7 @@ case stashStore(commit: String, message: String)
 case stashDropMatchingHash(hash: String)
 ```
 
-- [ ] **Step 2: Add executor stash support**
+- [x] **Step 2: Add executor stash support**
 
 In `GitUndoExecutor`, add a stored helper:
 
@@ -243,7 +243,7 @@ case .stashDropMatchingHash(let hash):
     try await stashSupport.dropStash(matchingHash: hash, in: repositoryURL)
 ```
 
-- [ ] **Step 3: Write real-repo tests for undo save and undo drop**
+- [x] **Step 3: Write real-repo tests for undo save and undo drop**
 
 Create `macgitTests/GitUndoStashSaveDropTests.swift`:
 
@@ -315,7 +315,7 @@ final class GitUndoStashSaveDropTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 4: Run stash undo tests**
+- [x] **Step 4: Run stash undo tests**
 
 Run:
 
@@ -325,7 +325,7 @@ xcodebuild test -project macgit.xcodeproj -scheme macgit -destination 'platform=
 
 Expected: tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -342,7 +342,7 @@ Expected: commit succeeds.
 - Modify: `macgit/Services/SyncState.swift`
 - Modify: `macgit/Views/MainWindow/MainWindowView.swift`
 
-- [ ] **Step 1: Register undo for stash save**
+- [x] **Step 1: Register undo for stash save**
 
 In `SyncState.performStash`, change the signature:
 
@@ -365,7 +365,7 @@ undoManager?.register(
 )
 ```
 
-- [ ] **Step 2: Pass undo manager to stash sheet completion**
+- [x] **Step 2: Pass undo manager to stash sheet completion**
 
 In `MainWindowView.stashSheet`, replace:
 
@@ -379,7 +379,7 @@ with:
 await syncState.performStash(options: options, repositoryURL: repositoryURL, undoManager: undoManager)
 ```
 
-- [ ] **Step 3: Register undo for stash drop**
+- [x] **Step 3: Register undo for stash drop**
 
 In `MainWindowView.performStashAction`, inside `case .delete`, replace:
 
@@ -404,7 +404,7 @@ undoManager.register(
 )
 ```
 
-- [ ] **Step 4: Build and run stash tests**
+- [x] **Step 4: Build and run stash tests**
 
 Run:
 
@@ -415,7 +415,7 @@ xcodebuild build -project macgit.xcodeproj -scheme macgit -destination 'platform
 
 Expected: stash tests pass and app builds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
