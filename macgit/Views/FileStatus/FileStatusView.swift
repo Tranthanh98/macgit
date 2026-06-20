@@ -863,9 +863,22 @@ struct FileStatusView: View {
 
     private func discard(files: [StatusFile]) async {
         guard !files.isEmpty else { return }
+        let paths = files.map(\.path)
+        let snapshotStore = GitFileUndoSnapshotStore()
         do {
+            let snapshot = try snapshotStore.capture(paths: paths, in: repositoryURL)
             for file in files {
                 try await GitStatusService.shared.discard(file: file, in: repositoryURL)
+            }
+            await MainActor.run {
+                undoManager?.register(
+                    GitUndoEntry(
+                        repositoryURL: repositoryURL,
+                        label: paths.count == 1 ? "Discard \((paths[0] as NSString).lastPathComponent)" : "Discard \(paths.count) files",
+                        undoOperation: .restoreFileSnapshot(id: snapshot.id),
+                        redoOperation: .discardFiles(paths: paths)
+                    )
+                )
             }
             await loadStatus()
         } catch {
@@ -890,9 +903,22 @@ struct FileStatusView: View {
 
     private func remove(files: [StatusFile]) async {
         guard !files.isEmpty else { return }
+        let paths = files.map(\.path)
+        let snapshotStore = GitFileUndoSnapshotStore()
         do {
+            let snapshot = try snapshotStore.capture(paths: paths, in: repositoryURL)
             for file in files {
                 try await GitStatusService.shared.remove(file: file, in: repositoryURL)
+            }
+            await MainActor.run {
+                undoManager?.register(
+                    GitUndoEntry(
+                        repositoryURL: repositoryURL,
+                        label: paths.count == 1 ? "Remove \((paths[0] as NSString).lastPathComponent)" : "Remove \(paths.count) files",
+                        undoOperation: .restoreFileSnapshot(id: snapshot.id),
+                        redoOperation: .removeFiles(paths: paths)
+                    )
+                )
             }
             await loadStatus()
         } catch {

@@ -41,6 +41,8 @@ indirect enum GitUndoOperation: Equatable {
     case stashPop(ref: String)
     case restoreFileSnapshot(id: UUID)
     case deleteFileSnapshot(id: UUID)
+    case discardFiles(paths: [String])
+    case removeFiles(paths: [String])
 }
 
 struct GitUndoEntry: Identifiable, Equatable {

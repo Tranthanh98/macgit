@@ -120,6 +120,14 @@ struct GitUndoExecutor {
             try snapshotStore.restore(snapshotID: id, in: repositoryURL)
         case .deleteFileSnapshot(let id):
             try snapshotStore.delete(snapshotID: id, in: repositoryURL)
+        case .discardFiles(let paths):
+            for path in paths {
+                _ = try await runner.runGit(arguments: ["checkout", "--", path], in: repositoryURL)
+            }
+        case .removeFiles(let paths):
+            for path in paths {
+                _ = try await runner.runGit(arguments: ["rm", "-f", path], in: repositoryURL)
+            }
         }
     }
 
