@@ -12,15 +12,15 @@
 
 ## Plan Index
 
-- Phase 0 + 1A: [2026-06-19-git-undo-phase-0-1a.md](2026-06-19-git-undo-phase-0-1a.md)
-- Phase 1B: [2026-06-19-git-undo-phase-1b-hunks-lines.md](2026-06-19-git-undo-phase-1b-hunks-lines.md)
-- Phase 2: [2026-06-19-git-undo-phase-2-commits.md](2026-06-19-git-undo-phase-2-commits.md)
-- Phase 3A: [2026-06-19-git-undo-phase-3a-stash-save-drop.md](2026-06-19-git-undo-phase-3a-stash-save-drop.md)
-- Phase 3B: [2026-06-19-git-undo-phase-3b-stash-apply-pop.md](2026-06-19-git-undo-phase-3b-stash-apply-pop.md)
-- Phase 4: [2026-06-19-git-undo-phase-4-local-branches.md](2026-06-19-git-undo-phase-4-local-branches.md)
-- Phase 5: [2026-06-19-git-undo-phase-5-discard-remove.md](2026-06-19-git-undo-phase-5-discard-remove.md)
-- Phase 6: [2026-06-19-git-undo-phase-6-history-actions.md](2026-06-19-git-undo-phase-6-history-actions.md)
-- Phase 7: [2026-06-19-git-undo-phase-7-remote-actions.md](2026-06-19-git-undo-phase-7-remote-actions.md)
+- Phase 0 + 1A: [completed] [2026-06-19-git-undo-phase-0-1a.md](2026-06-19-git-undo-phase-0-1a.md) (branch: codex/git-undo-phase-0-1a)
+- Phase 1B: [completed] [2026-06-19-git-undo-phase-1b-hunks-lines.md](2026-06-19-git-undo-phase-1b-hunks-lines.md) (branch: codex/git-undo-phase-1b)
+- Phase 2: [completed] [2026-06-19-git-undo-phase-2-commits.md](2026-06-19-git-undo-phase-2-commits.md) (branch: codex/git-undo-phase-2)
+- Phase 3A: [completed] [2026-06-19-git-undo-phase-3a-stash-save-drop.md](2026-06-19-git-undo-phase-3a-stash-save-drop.md) (branch: codex/git-undo-phase-3a)
+- Phase 3B: [pending] [2026-06-19-git-undo-phase-3b-stash-apply-pop.md](2026-06-19-git-undo-phase-3b-stash-apply-pop.md)
+- Phase 4: [pending] [2026-06-19-git-undo-phase-4-local-branches.md](2026-06-19-git-undo-phase-4-local-branches.md)
+- Phase 5: [pending] [2026-06-19-git-undo-phase-5-discard-remove.md](2026-06-19-git-undo-phase-5-discard-remove.md)
+- Phase 6: [pending] [2026-06-19-git-undo-phase-6-history-actions.md](2026-06-19-git-undo-phase-6-history-actions.md)
+- Phase 7: [pending] [2026-06-19-git-undo-phase-7-remote-actions.md](2026-06-19-git-undo-phase-7-remote-actions.md)
 
 ## Recommended Order
 
