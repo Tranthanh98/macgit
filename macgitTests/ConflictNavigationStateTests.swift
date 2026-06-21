@@ -20,9 +20,10 @@ final class ConflictNavigationStateTests: XCTestCase {
 
         XCTAssertEqual(navigation.unresolvedConflictSectionIndices, [1, 5])
         XCTAssertEqual(navigation.currentSectionIndex, 1)
-        XCTAssertNil(navigation.previousSectionIndex)
+        // Cyclic navigation wraps around to the last unresolved conflict.
+        XCTAssertEqual(navigation.previousSectionIndex, 5)
         XCTAssertEqual(navigation.nextSectionIndex, 5)
-        XCTAssertFalse(navigation.canNavigatePrevious)
+        XCTAssertTrue(navigation.canNavigatePrevious)
         XCTAssertTrue(navigation.canNavigateNext)
     }
 
@@ -41,10 +42,32 @@ final class ConflictNavigationStateTests: XCTestCase {
         let navigation = ConflictNavigationState(document: document, currentSectionIndex: 2)
 
         XCTAssertEqual(navigation.currentSectionIndex, 3)
+        // Cyclic navigation wraps around; 1 is both the previous and next target.
         XCTAssertEqual(navigation.previousSectionIndex, 1)
-        XCTAssertNil(navigation.nextSectionIndex)
+        XCTAssertEqual(navigation.nextSectionIndex, 1)
         XCTAssertTrue(navigation.canNavigatePrevious)
-        XCTAssertFalse(navigation.canNavigateNext)
+        XCTAssertTrue(navigation.canNavigateNext)
+    }
+
+    func testNavigationCyclesSingleConflict() {
+        let document = ConflictResolutionDocument(
+            sections: [
+                .context("prefix\n"),
+                .conflict(current: "current 1\n", incoming: "incoming 1\n"),
+                .context("suffix\n"),
+            ],
+            currentContent: "",
+            incomingContent: ""
+        )
+
+        let navigation = ConflictNavigationState(document: document, currentSectionIndex: nil)
+
+        XCTAssertEqual(navigation.unresolvedConflictSectionIndices, [1])
+        XCTAssertEqual(navigation.currentSectionIndex, 1)
+        XCTAssertEqual(navigation.previousSectionIndex, 1)
+        XCTAssertEqual(navigation.nextSectionIndex, 1)
+        XCTAssertTrue(navigation.canNavigatePrevious)
+        XCTAssertTrue(navigation.canNavigateNext)
     }
 
     func testNavigationHasNoTargetsWhenAllConflictsAreResolved() {

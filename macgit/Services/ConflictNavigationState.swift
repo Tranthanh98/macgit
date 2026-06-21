@@ -40,8 +40,14 @@ struct ConflictNavigationState {
 
         if let normalizedCurrentSectionIndex,
            let currentIndex = unresolvedConflictSectionIndices.firstIndex(of: normalizedCurrentSectionIndex) {
-            previousSectionIndex = currentIndex > 0 ? unresolvedConflictSectionIndices[currentIndex - 1] : nil
-            nextSectionIndex = currentIndex + 1 < unresolvedConflictSectionIndices.count ? unresolvedConflictSectionIndices[currentIndex + 1] : nil
+            let count = unresolvedConflictSectionIndices.count
+            // Cyclic navigation: the previous/next buttons remain enabled as long as
+            // any unresolved conflicts exist, including when there is only a single
+            // conflict block. Clicking either button re-scrolls to that block.
+            let previousIndex = (currentIndex - 1 + count) % count
+            let nextIndex = (currentIndex + 1) % count
+            previousSectionIndex = unresolvedConflictSectionIndices[previousIndex]
+            nextSectionIndex = unresolvedConflictSectionIndices[nextIndex]
         } else {
             previousSectionIndex = nil
             nextSectionIndex = nil

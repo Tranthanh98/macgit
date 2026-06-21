@@ -461,13 +461,8 @@ struct ConflictMergeToolView: View {
             let loadedDocument = try await GitStatusService.shared.conflictDocument(for: file, in: repositoryURL)
             await MainActor.run {
                 document = loadedDocument
-                focusCurrentConflict(in: loadedDocument, preferredSectionIndex: nil, scroll: false)
                 hasUnsavedChanges = false
-                if let selectedConflictSectionIndex {
-                    scrollToConflict(selectedConflictSectionIndex, in: loadedDocument)
-                } else {
-                    scrollController.scrollToTop()
-                }
+                focusCurrentConflict(in: loadedDocument, preferredSectionIndex: nil, scroll: true)
             }
         } catch is CancellationError {
             // Task was cancelled, likely because user switched files. Ignore.

@@ -4,6 +4,7 @@ final class SyncedScrollController {
     private var scrollViews: [String: WeakScrollView] = [:]
     private var observers: [String: NSObjectProtocol] = [:]
     private var isApplyingSynchronizedScroll = false
+    private var lastRequestedOffset: CGFloat?
 
     func register(_ scrollView: NSScrollView, id: String) {
         removeReleasedScrollViews()
@@ -24,6 +25,13 @@ final class SyncedScrollController {
             guard let self, let scrollView else { return }
             self.syncScroll(from: id, source: scrollView)
         }
+
+        // If a scroll offset was requested before this scroll view finished
+        // registering, apply it now so callers can scroll before the bridge
+        // between SwiftUI and AppKit is fully wired up.
+        if let lastRequestedOffset {
+            setVerticalOffset(lastRequestedOffset, on: scrollView)
+        }
     }
 
     func unregister(id: String, scrollView: NSScrollView? = nil) {
@@ -43,6 +51,7 @@ final class SyncedScrollController {
 
     func scrollToVerticalOffset(_ offset: CGFloat) {
         removeReleasedScrollViews()
+        lastRequestedOffset = offset
         isApplyingSynchronizedScroll = true
         for scrollView in scrollViews.values.compactMap(\.value) {
             setVerticalOffset(offset, on: scrollView)
