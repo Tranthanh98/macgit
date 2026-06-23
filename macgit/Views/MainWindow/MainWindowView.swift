@@ -61,7 +61,7 @@ struct MainWindowView: View {
                 Text(syncState.infoMessage ?? "")
             })
             .confirmationDialog(
-                "Confirm Git Undo",
+                pendingConfirmedUndo?.action == .redo ? "Confirm Git Redo" : "Confirm Git Undo",
                 isPresented: Binding(
                     get: { pendingConfirmedUndo != nil },
                     set: { isPresented in
@@ -80,7 +80,7 @@ struct MainWindowView: View {
                 ),
                 titleVisibility: .visible
             ) {
-                Button("Undo", role: .destructive) {
+                Button(pendingConfirmedUndo?.action == .redo ? "Redo" : "Undo", role: .destructive) {
                     guard let pending = pendingConfirmedUndo else { return }
                     pendingConfirmedUndo = nil
                     Task {
@@ -830,6 +830,7 @@ struct MainWindowView: View {
             syncState.showInfo("Wait for the current Git operation to finish before undoing.")
             return
         }
+        guard pendingConfirmedUndo == nil else { return }
 
         switch action {
         case .undo:
@@ -837,7 +838,7 @@ struct MainWindowView: View {
                 syncState.showInfo("Nothing to undo.")
                 return
             }
-            if entry.confirmationMessage != nil {
+            if let message = entry.confirmationMessage, !message.isEmpty {
                 pendingConfirmedUndo = (entry, action)
                 return
             }
@@ -849,7 +850,7 @@ struct MainWindowView: View {
                 syncState.showInfo("Nothing to redo.")
                 return
             }
-            if entry.confirmationMessage != nil {
+            if let message = entry.confirmationMessage, !message.isEmpty {
                 pendingConfirmedUndo = (entry, action)
                 return
             }
