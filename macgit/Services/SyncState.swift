@@ -104,7 +104,7 @@ class SyncState: ObservableObject {
         return hasConflicts
     }
 
-    func performPush(options: GitStatusService.PushOptions, repositoryURL: URL) async {
+    func performPush(options: GitStatusService.PushOptions, repositoryURL: URL, undoManager: GitUndoManager? = nil) async {
         if await checkConflicts(repositoryURL: repositoryURL) { return }
         await MainActor.run { isPushing = true }
         defer {
@@ -113,6 +113,23 @@ class SyncState: ObservableObject {
                 activeSyncBranch = nil
             }
         }
+
+        let remoteSupport = GitRemoteUndoSupport()
+        var unpublishedBranches: [(local: String, remote: String)] = []
+        for local in options.branches {
+            let remoteBranch = options.branchMappings[local] ?? local
+            guard !local.isEmpty, !remoteBranch.isEmpty else { continue }
+            do {
+                let existingHash = try await remoteSupport.remoteHash(remote: options.remote, branch: remoteBranch, in: repositoryURL)
+                if existingHash == nil {
+                    unpublishedBranches.append((local, remoteBranch))
+                }
+            } catch {
+                // Pre-flight check failed; skip undo registration for this branch to avoid misclassifying it as new.
+                continue
+            }
+        }
+
         do {
             await MainActor.run {
                 activeSyncBranch = options.branches.count == 1 ? options.branches.first : nil
@@ -120,6 +137,21 @@ class SyncState: ObservableObject {
             let output = try await GitStatusService.shared.push(options: options, in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
             notifyRepositoryChanged(repositoryURL)
+            for mapping in unpublishedBranches {
+                if let remoteHash = try await remoteSupport.remoteHash(remote: options.remote, branch: mapping.remote, in: repositoryURL) {
+                    await MainActor.run {
+                        undoManager?.register(
+                            GitUndoEntry(
+                                repositoryURL: repositoryURL,
+                                label: "Publish \(options.remote)/\(mapping.remote)",
+                                undoOperation: .deleteRemoteBranch(remote: options.remote, branch: mapping.remote, expectedHash: remoteHash),
+                                redoOperation: .pushBranch(remote: options.remote, localBranch: mapping.local, remoteBranch: mapping.remote),
+                                confirmationMessage: "Undoing publish will delete '\(options.remote)/\(mapping.remote)' from the remote. Continue?"
+                            )
+                        )
+                    }
+                }
+            }
             let trimmed = output.lowercased()
             if trimmed.contains("everything up-to-date") || trimmed.contains("everything up to date") {
                 showInfo("Everything up-to-date.")
@@ -131,7 +163,7 @@ class SyncState: ObservableObject {
         }
     }
 
-    func performPull(remote: String, branch: String, options: GitStatusService.PullOptions, repositoryURL: URL) async {
+    func performPull(remote: String, branch: String, options: GitStatusService.PullOptions, repositoryURL: URL, undoManager: GitUndoManager? = nil) async {
         if await checkConflicts(repositoryURL: repositoryURL) { return }
         await MainActor.run { isPulling = true }
         defer {
@@ -140,11 +172,27 @@ class SyncState: ObservableObject {
                 activeSyncBranch = nil
             }
         }
+        let oldHead = await GitStatusService.shared.tipHash(for: "HEAD", in: repositoryURL)
         do {
             await MainActor.run { activeSyncBranch = branch }
             let output = try await GitStatusService.shared.pull(remote: remote, branch: branch, options: options, in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
             notifyRepositoryChanged(repositoryURL)
+            if let oldHead,
+               let newHead = await GitStatusService.shared.tipHash(for: "HEAD", in: repositoryURL),
+               oldHead != newHead {
+                await MainActor.run {
+                    undoManager?.register(
+                        GitUndoEntry(
+                            repositoryURL: repositoryURL,
+                            label: "Pull",
+                            undoOperation: .resetHead(target: oldHead, mode: .hard, expectedHead: newHead),
+                            redoOperation: .resetHead(target: newHead, mode: .hard, expectedHead: oldHead),
+                            confirmationMessage: "Undoing a pull will reset the current branch back to its previous commit. Continue?"
+                        )
+                    )
+                }
+            }
             let trimmed = output.lowercased()
             if trimmed.contains("already up to date") || trimmed.contains("already up-to-date") {
                 showInfo("Already up to date.")
@@ -161,7 +209,7 @@ class SyncState: ObservableObject {
         }
     }
 
-    func performPullBranch(branch: String, repositoryURL: URL) async {
+    func performPullBranch(branch: String, repositoryURL: URL, undoManager: GitUndoManager? = nil) async {
         if await checkConflicts(repositoryURL: repositoryURL) { return }
         await MainActor.run { isPulling = true }
         defer {
@@ -170,11 +218,27 @@ class SyncState: ObservableObject {
                 activeSyncBranch = nil
             }
         }
+        let oldHead = await GitStatusService.shared.tipHash(for: "HEAD", in: repositoryURL)
         do {
             await MainActor.run { activeSyncBranch = branch }
             let output = try await GitStatusService.shared.pullBranchFromUpstream(branch: branch, in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
             notifyRepositoryChanged(repositoryURL)
+            if let oldHead,
+               let newHead = await GitStatusService.shared.tipHash(for: "HEAD", in: repositoryURL),
+               oldHead != newHead {
+                await MainActor.run {
+                    undoManager?.register(
+                        GitUndoEntry(
+                            repositoryURL: repositoryURL,
+                            label: "Pull",
+                            undoOperation: .resetHead(target: oldHead, mode: .hard, expectedHead: newHead),
+                            redoOperation: .resetHead(target: newHead, mode: .hard, expectedHead: oldHead),
+                            confirmationMessage: "Undoing a pull will reset the current branch back to its previous commit. Continue?"
+                        )
+                    )
+                }
+            }
             let trimmed = output.lowercased()
             if trimmed.contains("already up to date") || trimmed.contains("already up-to-date") {
                 showInfo("Already up to date.")

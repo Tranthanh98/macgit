@@ -39,6 +39,8 @@ indirect enum GitUndoOperation: Equatable {
     case checkoutRef(ref: String)
     case createLocalBranch(name: String, startPoint: String, checkout: Bool)
     case deleteLocalBranch(name: String, force: Bool, expectedTip: String?)
+    case deleteRemoteBranch(remote: String, branch: String, expectedHash: String)
+    case pushBranch(remote: String, localBranch: String, remoteBranch: String)
     case setUpstream(branch: String, upstream: String)
     case sequence([GitUndoOperation])
     case resetHardToHead(expectedHead: String?)
@@ -55,19 +57,22 @@ struct GitUndoEntry: Identifiable, Equatable {
     let label: String
     let undoOperation: GitUndoOperation
     let redoOperation: GitUndoOperation
+    let confirmationMessage: String?
 
     init(
         id: UUID = UUID(),
         repositoryURL: URL,
         label: String,
         undoOperation: GitUndoOperation,
-        redoOperation: GitUndoOperation
+        redoOperation: GitUndoOperation,
+        confirmationMessage: String? = nil
     ) {
         self.id = id
         self.repositoryURL = repositoryURL
         self.label = label
         self.undoOperation = undoOperation
         self.redoOperation = redoOperation
+        self.confirmationMessage = confirmationMessage
     }
 }
 
