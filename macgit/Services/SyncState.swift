@@ -114,22 +114,14 @@ class SyncState: ObservableObject {
             }
         }
 
-        let branchSupport = GitBranchUndoSupport()
+        let remoteSupport = GitRemoteUndoSupport()
         var unpublishedBranches: [(local: String, remote: String)] = []
-        for branch in options.branches {
-            let local: String
-            let remote: String
-            if let colonIndex = branch.firstIndex(of: ":") {
-                local = String(branch[..<colonIndex])
-                remote = String(branch[branch.index(after: colonIndex)...])
-            } else {
-                local = branch
-                remote = branch
-            }
-            guard !local.isEmpty, !remote.isEmpty else { continue }
-            let upstream = await branchSupport.upstream(of: local, in: repositoryURL)
-            if upstream == nil {
-                unpublishedBranches.append((local, remote))
+        for local in options.branches {
+            let remoteBranch = options.branchMappings[local] ?? local
+            guard !local.isEmpty, !remoteBranch.isEmpty else { continue }
+            let existingHash = try? await remoteSupport.remoteHash(remote: options.remote, branch: remoteBranch, in: repositoryURL)
+            if existingHash == nil {
+                unpublishedBranches.append((local, remoteBranch))
             }
         }
 
@@ -140,7 +132,6 @@ class SyncState: ObservableObject {
             let output = try await GitStatusService.shared.push(options: options, in: repositoryURL)
             await refresh(repositoryURL: repositoryURL)
             notifyRepositoryChanged(repositoryURL)
-            let remoteSupport = GitRemoteUndoSupport()
             for mapping in unpublishedBranches {
                 if let remoteHash = try await remoteSupport.remoteHash(remote: options.remote, branch: mapping.remote, in: repositoryURL) {
                     await MainActor.run {
@@ -149,7 +140,7 @@ class SyncState: ObservableObject {
                                 repositoryURL: repositoryURL,
                                 label: "Publish \(mapping.remote)",
                                 undoOperation: .deleteRemoteBranch(remote: options.remote, branch: mapping.remote, expectedHash: remoteHash),
-                                redoOperation: .sequence([]),
+                                redoOperation: .pushBranch(remote: options.remote, localBranch: mapping.local, remoteBranch: mapping.remote),
                                 confirmationMessage: "Undoing publish will delete '\(options.remote)/\(mapping.remote)' from the remote. Continue?"
                             )
                         )
@@ -192,7 +183,7 @@ class SyncState: ObservableObject {
                             label: "Pull",
                             undoOperation: .resetHead(target: oldHead, mode: .hard, expectedHead: newHead),
                             redoOperation: .sequence([
-                                .resetHead(target: oldHead, mode: .hard, expectedHead: newHead)
+                                .resetHead(target: newHead, mode: .hard, expectedHead: oldHead)
                             ]),
                             confirmationMessage: "Undoing a pull will reset the current branch back to its previous commit. Continue?"
                         )
@@ -240,7 +231,7 @@ class SyncState: ObservableObject {
                             label: "Pull",
                             undoOperation: .resetHead(target: oldHead, mode: .hard, expectedHead: newHead),
                             redoOperation: .sequence([
-                                .resetHead(target: oldHead, mode: .hard, expectedHead: newHead)
+                                .resetHead(target: newHead, mode: .hard, expectedHead: oldHead)
                             ]),
                             confirmationMessage: "Undoing a pull will reset the current branch back to its previous commit. Continue?"
                         )

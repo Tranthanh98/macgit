@@ -117,6 +117,9 @@ struct GitUndoExecutor {
                 throw GitError.commandFailed("Cannot delete remote branch '\(branch)' because it is no longer at the expected hash.")
             }
             _ = try await runner.runGit(arguments: ["push", remote, "--delete", branch], in: repositoryURL)
+        case .pushBranch(let remote, let localBranch, let remoteBranch):
+            let refSpec = localBranch == remoteBranch ? localBranch : "\(localBranch):\(remoteBranch)"
+            _ = try await runner.runGit(arguments: ["push", remote, refSpec], in: repositoryURL)
         case .setUpstream(let branch, let upstream):
             _ = try await runner.runGit(
                 arguments: ["branch", "--set-upstream-to", upstream, branch],

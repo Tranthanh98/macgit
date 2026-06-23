@@ -125,12 +125,44 @@ final class GitUndoExecutorTests: XCTestCase {
             )
             XCTFail("Expected hash mismatch error")
         } catch let error as GitError {
-                XCTAssertTrue(error.localizedDescription.contains("no longer at the expected hash"))
+            XCTAssertTrue(error.localizedDescription.contains("no longer at the expected hash"))
         }
 
         let calls = await runner.recordedCalls()
         XCTAssertEqual(calls, [
             GitCommandCall(arguments: ["ls-remote", "origin", "refs/heads/feature"], directory: repoURL)
+        ])
+    }
+
+    func testPushBranchRunsGitPushWithSimpleRefSpec() async throws {
+        let runner = RecordingGitRunner()
+        let executor = GitUndoExecutor(runner: runner)
+        let repoURL = URL(fileURLWithPath: "/tmp/repo")
+
+        try await executor.execute(
+            .pushBranch(remote: "origin", localBranch: "feature", remoteBranch: "feature"),
+            in: repoURL
+        )
+
+        let calls = await runner.recordedCalls()
+        XCTAssertEqual(calls, [
+            GitCommandCall(arguments: ["push", "origin", "feature"], directory: repoURL)
+        ])
+    }
+
+    func testPushBranchRunsGitPushWithExplicitRefSpecWhenNamesDiffer() async throws {
+        let runner = RecordingGitRunner()
+        let executor = GitUndoExecutor(runner: runner)
+        let repoURL = URL(fileURLWithPath: "/tmp/repo")
+
+        try await executor.execute(
+            .pushBranch(remote: "origin", localBranch: "feature", remoteBranch: "feat-42"),
+            in: repoURL
+        )
+
+        let calls = await runner.recordedCalls()
+        XCTAssertEqual(calls, [
+            GitCommandCall(arguments: ["push", "origin", "feature:feat-42"], directory: repoURL)
         ])
     }
 
