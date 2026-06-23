@@ -838,7 +838,7 @@ struct MainWindowView: View {
                 syncState.showInfo("Nothing to undo.")
                 return
             }
-            if let message = entry.confirmationMessage, !message.isEmpty {
+            if entry.confirmationMessage?.isEmpty == false {
                 pendingConfirmedUndo = (entry, action)
                 return
             }
@@ -850,7 +850,7 @@ struct MainWindowView: View {
                 syncState.showInfo("Nothing to redo.")
                 return
             }
-            if let message = entry.confirmationMessage, !message.isEmpty {
+            if entry.confirmationMessage?.isEmpty == false {
                 pendingConfirmedUndo = (entry, action)
                 return
             }
