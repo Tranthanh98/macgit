@@ -240,7 +240,11 @@ struct MainWindowView: View {
             },
             onRequestFetchBranch: { branch in
                 Task {
-                    await syncState.performPullBranch(branch: branch, repositoryURL: repositoryURL)
+                    await syncState.performPullBranch(
+                        branch: branch,
+                        repositoryURL: repositoryURL,
+                        undoManager: undoManager
+                    )
                 }
             },
             onRequestApplyStash: { ref in
@@ -352,7 +356,13 @@ struct MainWindowView: View {
             defaultPullStrategy: repoSettings.pullStrategy
         ) { remote, branch, options in
             Task {
-                await syncState.performPull(remote: remote, branch: branch, options: options, repositoryURL: repositoryURL)
+                await syncState.performPull(
+                    remote: remote,
+                    branch: branch,
+                    options: options,
+                    repositoryURL: repositoryURL,
+                    undoManager: undoManager
+                )
             }
         }
     }
@@ -361,7 +371,11 @@ struct MainWindowView: View {
     private var pushSheet: some View {
         PushSheetView(repositoryURL: repositoryURL) { options in
             Task {
-                await syncState.performPush(options: options, repositoryURL: repositoryURL)
+                await syncState.performPush(
+                    options: options,
+                    repositoryURL: repositoryURL,
+                    undoManager: undoManager
+                )
             }
         }
     }
