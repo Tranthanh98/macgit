@@ -28,29 +28,6 @@ struct Commit: Identifiable, Equatable {
     }
 }
 
-// MARK: - Graph Layout
-
-struct GraphNode: Identifiable {
-    let id = UUID()
-    let commit: Commit
-    let lane: Int
-    let rowIndex: Int
-}
-
-struct GraphEdge {
-    let fromRow: Int
-    let fromLane: Int
-    let toRow: Int
-    let toLane: Int
-    let isMergeParent: Bool
-}
-
-struct CommitGraphLayout {
-    let nodes: [GraphNode]
-    let edges: [GraphEdge]
-    let laneCount: Int
-}
-
 // MARK: - Commit File Change
 
 struct CommitFileChange: Identifiable, Hashable {

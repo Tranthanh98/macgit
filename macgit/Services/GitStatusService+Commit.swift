@@ -53,7 +53,7 @@ extension GitStatusService {
     }
 
     func commitHistory(allBranches: Bool, limit: Int, skip: Int = 0, in repositoryURL: URL) async -> [Commit] {
-        var arguments = ["log"]
+        var arguments = ["log", "--topo-order"]
         if allBranches {
             arguments.append("--all")
         }
@@ -75,7 +75,7 @@ extension GitStatusService {
 
     func commitHistory(branch: String, limit: Int, skip: Int = 0, in repositoryURL: URL) async -> [Commit] {
         let arguments = [
-            "log", branch,
+            "log", "--topo-order", branch,
             "--format=%H%x00%P%x00%s%x00%an%x00%ae%x00%ad%x00%D",
             "--date=iso-strict",
             "--max-count", "\(limit)"

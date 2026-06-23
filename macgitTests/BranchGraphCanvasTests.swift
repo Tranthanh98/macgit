@@ -2,27 +2,72 @@ import XCTest
 @testable import macgit
 
 final class BranchGraphCanvasTests: XCTestCase {
-    func testRoutesMergeParentWithRoundedCornerAtSource() {
-        let edge = GraphEdge(fromRow: 0, fromLane: 1, toRow: 3, toLane: 0, isMergeParent: true)
-
-        let route = BranchGraphCanvas.edgeRoute(for: edge, rowHeight: 20, laneWidth: 10)
-
-        XCTAssertEqual(route.start, CGPoint(x: 15, y: 10))
-        XCTAssertEqual(route.preTurn, CGPoint(x: 9, y: 10))
-        XCTAssertEqual(route.corner, CGPoint(x: 5, y: 10))
-        XCTAssertEqual(route.postTurn, CGPoint(x: 5, y: 14))
-        XCTAssertEqual(route.end, CGPoint(x: 5, y: 70))
+    func testStraightVerticalPathReachesEnd() {
+        let path = BranchGraphCanvas.path(
+            for: [GraphPoint(row: 0, lane: 0), GraphPoint(row: 2, lane: 0)],
+            rowHeight: 20,
+            laneWidth: 10
+        )
+        let rect = path.boundingRect
+        XCTAssertEqual(rect.midX, 5, accuracy: 0.001)
+        XCTAssertEqual(rect.minY, 10, accuracy: 0.001)
+        XCTAssertEqual(rect.maxY, 50, accuracy: 0.001)
     }
 
-    func testRoutesFirstParentWithRoundedCornerAtDestination() {
-        let edge = GraphEdge(fromRow: 0, fromLane: 0, toRow: 3, toLane: 1, isMergeParent: false)
+    func testLaneChangingPathReachesTarget() {
+        let path = BranchGraphCanvas.path(
+            for: [GraphPoint(row: 0, lane: 1), GraphPoint(row: 3, lane: 0)],
+            rowHeight: 20,
+            laneWidth: 10
+        )
+        let rect = path.boundingRect
+        XCTAssertEqual(rect.minX, 5, accuracy: 0.001)
+        XCTAssertEqual(rect.maxX, 15, accuracy: 0.001)
+        XCTAssertEqual(rect.minY, 10, accuracy: 0.001)
+        XCTAssertEqual(rect.maxY, 70, accuracy: 0.001)
+    }
 
-        let route = BranchGraphCanvas.edgeRoute(for: edge, rowHeight: 20, laneWidth: 10)
+    func testSinglePointReturnsEmptyPath() {
+        let path = BranchGraphCanvas.path(
+            for: [GraphPoint(row: 0, lane: 0)],
+            rowHeight: 20,
+            laneWidth: 10
+        )
+        XCTAssertTrue(path.boundingRect.isEmpty)
+    }
 
-        XCTAssertEqual(route.start, CGPoint(x: 5, y: 10))
-        XCTAssertEqual(route.preTurn, CGPoint(x: 5, y: 66))
-        XCTAssertEqual(route.corner, CGPoint(x: 5, y: 70))
-        XCTAssertEqual(route.postTurn, CGPoint(x: 9, y: 70))
-        XCTAssertEqual(route.end, CGPoint(x: 15, y: 70))
+    func testEmptyPointsArrayReturnsEmptyPath() {
+        let path = BranchGraphCanvas.path(for: [], rowHeight: 20, laneWidth: 10)
+        XCTAssertTrue(path.boundingRect.isEmpty)
+    }
+
+    func testMultiSegmentPathWithStraightAndCurve() {
+        let path = BranchGraphCanvas.path(
+            for: [
+                GraphPoint(row: 0, lane: 0),
+                GraphPoint(row: 1, lane: 0),
+                GraphPoint(row: 2, lane: 1)
+            ],
+            rowHeight: 20,
+            laneWidth: 10
+        )
+        let rect = path.boundingRect
+        XCTAssertEqual(rect.minX, 5, accuracy: 0.001)
+        XCTAssertEqual(rect.maxX, 15, accuracy: 0.001)
+        XCTAssertEqual(rect.minY, 10, accuracy: 0.001)
+        XCTAssertEqual(rect.maxY, 50, accuracy: 0.001)
+    }
+
+    func testMultiLaneJumpReachesTarget() {
+        let path = BranchGraphCanvas.path(
+            for: [GraphPoint(row: 0, lane: 3), GraphPoint(row: 2, lane: 0)],
+            rowHeight: 20,
+            laneWidth: 10
+        )
+        let rect = path.boundingRect
+        XCTAssertEqual(rect.minX, 5, accuracy: 0.001)
+        XCTAssertEqual(rect.maxX, 35, accuracy: 0.001)
+        XCTAssertEqual(rect.minY, 10, accuracy: 0.001)
+        XCTAssertEqual(rect.maxY, 50, accuracy: 0.001)
     }
 }

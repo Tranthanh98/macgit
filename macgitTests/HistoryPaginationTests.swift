@@ -55,6 +55,46 @@ final class HistoryPaginationTests: XCTestCase {
         XCTAssertFalse(state.isLoadingMore)
     }
 
+    func testCommitHistoryUsesTopoOrder() async throws {
+        let url = try makeRepoWithMergeTopology()
+
+        let allCommits = await GitStatusService.shared.commitHistory(allBranches: true, limit: 100, in: url)
+        let allMessages = allCommits.map { $0.message }
+
+        let featureIndex = try XCTUnwrap(allMessages.firstIndex(of: "feature work"))
+        let mainAfterMergeIndex = try XCTUnwrap(allMessages.firstIndex(of: "main after merge"))
+
+        XCTAssertGreaterThan(featureIndex, mainAfterMergeIndex)
+
+        let branchCommits = await GitStatusService.shared.commitHistory(branch: "main", limit: 100, in: url)
+        let branchMessages = branchCommits.map { $0.message }
+
+        let branchFeatureIndex = try XCTUnwrap(branchMessages.firstIndex(of: "feature work"))
+        let branchMainAfterMergeIndex = try XCTUnwrap(branchMessages.firstIndex(of: "main after merge"))
+
+        XCTAssertGreaterThan(branchFeatureIndex, branchMainAfterMergeIndex)
+    }
+
+    func testGraphLayoutStableAcrossPagination() async throws {
+        let url = try makeRepoWithFeatureBranch()
+
+        let page1 = await GitStatusService.shared.commitHistory(allBranches: true, limit: 3, skip: 0, in: url)
+        XCTAssertEqual(page1.count, 3)
+        let layout1 = CommitGraphLayoutEngine.layout(commits: page1)
+
+        let page2 = await GitStatusService.shared.commitHistory(allBranches: true, limit: 3, skip: 3, in: url)
+        let combined = page1 + page2
+        let layout2 = CommitGraphLayoutEngine.layout(commits: combined)
+
+        XCTAssertEqual(layout1.nodes.count, 3)
+        XCTAssertEqual(layout2.nodes.count, 6)
+
+        for i in layout1.nodes.indices {
+            XCTAssertEqual(layout1.nodes[i].lane, layout2.nodes[i].lane)
+            XCTAssertEqual(layout1.nodes[i].commit.hash, layout2.nodes[i].commit.hash)
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeRepoWithLinearHistory(commitCount: Int) throws -> URL {
@@ -97,6 +137,59 @@ final class HistoryPaginationTests: XCTestCase {
             try runGit(["add", "tracked.txt"], in: repoURL)
             try runGit(["commit", "-m", "main \(index)"], in: repoURL)
         }
+
+        return repoURL
+    }
+
+    private func makeRepoWithFeatureBranch() throws -> URL {
+        let repoURL = try makeTempRepo(named: "macgit-pagination-graph")
+        try runGit(["init", "-b", "main"], in: repoURL)
+        try configureGit(in: repoURL)
+
+        let fileURL = repoURL.appendingPathComponent("tracked.txt")
+
+        try "base\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        try runGit(["add", "tracked.txt"], in: repoURL)
+        try runGit(["commit", "-m", "base"], in: repoURL)
+
+        try runGit(["checkout", "-b", "feature"], in: repoURL)
+        for index in 1...2 {
+            try "feature \(index)\n".write(to: fileURL, atomically: true, encoding: .utf8)
+            try runGit(["add", "tracked.txt"], in: repoURL)
+            try runGit(["commit", "-m", "feature \(index)"], in: repoURL)
+        }
+
+        try runGit(["checkout", "main"], in: repoURL)
+        for index in 1...4 {
+            try "main \(index)\n".write(to: fileURL, atomically: true, encoding: .utf8)
+            try runGit(["add", "tracked.txt"], in: repoURL)
+            try runGit(["commit", "-m", "main \(index)"], in: repoURL)
+        }
+
+        return repoURL
+    }
+
+    private func makeRepoWithMergeTopology() throws -> URL {
+        let repoURL = try makeTempRepo(named: "macgit-topo-order")
+        try runGit(["init", "-b", "main"], in: repoURL)
+        try configureGit(in: repoURL)
+
+        let fileURL = repoURL.appendingPathComponent("tracked.txt")
+
+        try "base\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        try runGit(["add", "tracked.txt"], in: repoURL)
+        try runGit(["commit", "-m", "main before merge"], in: repoURL)
+
+        try runGit(["checkout", "-b", "feature"], in: repoURL)
+        try "feature\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        try runGit(["add", "tracked.txt"], in: repoURL)
+        try runGit(["commit", "-m", "feature work"], in: repoURL)
+
+        try runGit(["checkout", "main"], in: repoURL)
+        try runGit(["merge", "--no-ff", "feature", "-m", "merge feature"], in: repoURL)
+        try "after\n".write(to: fileURL, atomically: true, encoding: .utf8)
+        try runGit(["add", "tracked.txt"], in: repoURL)
+        try runGit(["commit", "-m", "main after merge"], in: repoURL)
 
         return repoURL
     }

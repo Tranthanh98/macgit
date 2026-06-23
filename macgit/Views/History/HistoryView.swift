@@ -505,7 +505,7 @@ struct HistoryView: View {
                                 if let layout = graphLayout {
                                     BranchGraphCanvas(
                                         nodes: layout.nodes,
-                                        edges: layout.edges,
+                                        paths: layout.paths,
                                         laneCount: layout.laneCount
                                     )
                                     .padding(.leading, 4)
