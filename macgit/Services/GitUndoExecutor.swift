@@ -32,7 +32,7 @@ struct GitUndoExecutor {
         patchRunner: (any GitPatchApplying)? = nil,
         stashSupport: GitStashUndoSupport? = nil,
         branchSupport: GitBranchUndoSupport? = nil,
-        remoteSupport: GitRemoteUndoSupport = GitRemoteUndoSupport(),
+        remoteSupport: GitRemoteUndoSupport? = nil,
         snapshotStore: GitFileUndoSnapshotStore = GitFileUndoSnapshotStore()
     ) {
         let resolvedRunner = runner ?? GitStatusService.shared
@@ -40,7 +40,7 @@ struct GitUndoExecutor {
         self.patchRunner = patchRunner ?? GitStatusService.shared
         self.stashSupport = stashSupport ?? GitStashUndoSupport(runner: resolvedRunner)
         self.branchSupport = branchSupport ?? GitBranchUndoSupport(runner: resolvedRunner)
-        self.remoteSupport = remoteSupport
+        self.remoteSupport = remoteSupport ?? GitRemoteUndoSupport(runner: resolvedRunner)
         self.snapshotStore = snapshotStore
     }
 
@@ -114,7 +114,7 @@ struct GitUndoExecutor {
         case .deleteRemoteBranch(let remote, let branch, let expectedHash):
             let actualHash = try await remoteSupport.remoteHash(remote: remote, branch: branch, in: repositoryURL)
             guard actualHash == expectedHash else {
-                throw GitError.commandFailed("Cannot delete remote branch '\(branch)' because its remote hash changed.")
+                throw GitError.commandFailed("Cannot delete remote branch '\(branch)' because it is no longer at the expected hash.")
             }
             _ = try await runner.runGit(arguments: ["push", remote, "--delete", branch], in: repositoryURL)
         case .setUpstream(let branch, let upstream):

@@ -8,8 +8,8 @@ import Foundation
 struct GitRemoteUndoSupport {
     private let runner: any GitCommandRunning
 
-    init(runner: any GitCommandRunning = GitStatusService.shared) {
-        self.runner = runner
+    init(runner: (any GitCommandRunning)? = nil) {
+        self.runner = runner ?? GitStatusService.shared
     }
 
     func remoteHash(remote: String, branch: String, in repositoryURL: URL) async throws -> String? {

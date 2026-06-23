@@ -96,6 +96,44 @@ final class GitUndoExecutorTests: XCTestCase {
         ])
     }
 
+    func testDeleteRemoteBranchChecksExpectedHashBeforeDeleting() async throws {
+        let runner = RecordingGitRunner(outputs: ["ls-remote origin refs/heads/feature": "abc123\trefs/heads/feature\n"])
+        let executor = GitUndoExecutor(runner: runner)
+        let repoURL = URL(fileURLWithPath: "/tmp/repo")
+
+        try await executor.execute(
+            .deleteRemoteBranch(remote: "origin", branch: "feature", expectedHash: "abc123"),
+            in: repoURL
+        )
+
+        let calls = await runner.recordedCalls()
+        XCTAssertEqual(calls, [
+            GitCommandCall(arguments: ["ls-remote", "origin", "refs/heads/feature"], directory: repoURL),
+            GitCommandCall(arguments: ["push", "origin", "--delete", "feature"], directory: repoURL)
+        ])
+    }
+
+    func testDeleteRemoteBranchThrowsWhenExpectedHashDoesNotMatch() async throws {
+        let runner = RecordingGitRunner(outputs: ["ls-remote origin refs/heads/feature": "def456\trefs/heads/feature\n"])
+        let executor = GitUndoExecutor(runner: runner)
+        let repoURL = URL(fileURLWithPath: "/tmp/repo")
+
+        do {
+            try await executor.execute(
+                .deleteRemoteBranch(remote: "origin", branch: "feature", expectedHash: "abc123"),
+                in: repoURL
+            )
+            XCTFail("Expected hash mismatch error")
+        } catch let error as GitError {
+                XCTAssertTrue(error.localizedDescription.contains("no longer at the expected hash"))
+        }
+
+        let calls = await runner.recordedCalls()
+        XCTAssertEqual(calls, [
+            GitCommandCall(arguments: ["ls-remote", "origin", "refs/heads/feature"], directory: repoURL)
+        ])
+    }
+
     func testSetUpstreamRunsGitBranchSetUpstreamTo() async throws {
         let runner = RecordingGitRunner()
         let executor = GitUndoExecutor(runner: runner)

@@ -11,6 +11,15 @@ final class GitRemoteUndoSupportTests: XCTestCase {
         XCTAssertEqual(hash, fixture.mainHash)
     }
 
+    func testRemoteBranchHashReturnsNilForMissingBranch() async throws {
+        let fixture = try makeLocalRemoteFixture()
+        let support = GitRemoteUndoSupport()
+
+        let hash = try await support.remoteHash(remote: "origin", branch: "missing", in: fixture.cloneURL)
+
+        XCTAssertNil(hash)
+    }
+
     private func makeLocalRemoteFixture() throws -> (remoteURL: URL, cloneURL: URL, mainHash: String) {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("macgit-remote-undo-\(UUID().uuidString)", isDirectory: true)
