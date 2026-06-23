@@ -119,9 +119,14 @@ class SyncState: ObservableObject {
         for local in options.branches {
             let remoteBranch = options.branchMappings[local] ?? local
             guard !local.isEmpty, !remoteBranch.isEmpty else { continue }
-            let existingHash = try? await remoteSupport.remoteHash(remote: options.remote, branch: remoteBranch, in: repositoryURL)
-            if existingHash == nil {
-                unpublishedBranches.append((local, remoteBranch))
+            do {
+                let existingHash = try await remoteSupport.remoteHash(remote: options.remote, branch: remoteBranch, in: repositoryURL)
+                if existingHash == nil {
+                    unpublishedBranches.append((local, remoteBranch))
+                }
+            } catch {
+                // Pre-flight check failed; skip undo registration for this branch to avoid misclassifying it as new.
+                continue
             }
         }
 
