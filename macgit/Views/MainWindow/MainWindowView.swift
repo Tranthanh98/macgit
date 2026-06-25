@@ -14,6 +14,8 @@ struct WindowWidthKey: PreferenceKey {
 
 struct MainWindowView: View {
     let repositoryURL: URL
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     private let repoSettingsStore = RepoSettingsStore.shared
     private let fileService = RepositorySettingsFileService()
     private let undoExecutor = GitUndoExecutor()
@@ -253,6 +255,12 @@ struct MainWindowView: View {
             onRequestDeleteStash: { ref in
                 requestStashAction(ref: ref, action: .delete)
             },
+            onRequestOpenWorktree: { path in
+                openWorktreeInNewWindow(at: path)
+            },
+            onRequestOpenWorktreeInTerminal: { path in
+                openWorktreeInTerminal(at: path)
+            },
             onRequestSearch: {
                 showingSearchModal = true
             }
@@ -278,7 +286,7 @@ struct MainWindowView: View {
                     syncState: syncState,
                     undoManager: undoManager
                 )
-            case .item(.history), .branch, .tag, .remoteBranch, .head:
+            case .item(.history), .branch, .worktree, .tag, .remoteBranch, .head:
                 HistoryView(
                     repositoryURL: repositoryURL,
                     selectedBranch: selectedBranchName,
@@ -729,6 +737,22 @@ struct MainWindowView: View {
             try process.run()
         } catch {
             print("Failed to open Terminal: \(error)")
+        }
+    }
+
+    private func openWorktreeInNewWindow(at path: URL) {
+        appState.newWindowRepoURL = path
+        openWindow(id: "main")
+    }
+
+    private func openWorktreeInTerminal(at path: URL) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", "Terminal", path.path]
+        do {
+            try process.run()
+        } catch {
+            print("Failed to open Terminal for worktree: \(error)")
         }
     }
 

@@ -10,6 +10,7 @@ import SwiftUI
 enum SidebarSelection: Hashable {
     case item(SidebarItem)
     case branch(String)
+    case worktree(URL)
     case tag(String)
     case remoteBranch(String)
     case stash(String)
@@ -35,6 +36,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 enum SidebarSection: String, CaseIterable {
     case workspace = "WORKSPACE"
     case branches = "BRANCHES"
+    case worktrees = "WORKTREES"
     case tags = "TAGS"
     case remotes = "REMOTES"
     case stashes = "STASHES"
@@ -76,6 +78,8 @@ struct SidebarView: View {
     let onRequestFetchBranch: (String) -> Void
     let onRequestApplyStash: (String) -> Void
     let onRequestDeleteStash: (String) -> Void
+    let onRequestOpenWorktree: (URL) -> Void
+    let onRequestOpenWorktreeInTerminal: (URL) -> Void
     let onRequestSearch: () -> Void
 
     @State private var branchNodes: [BranchNode] = []
@@ -92,12 +96,12 @@ struct SidebarView: View {
     @State private var expandedRemoteFolders: Set<String> = []
     @State private var stashEntries: [StashEntry] = []
     @State private var isLoadingStashes = false
+    @State private var worktreeEntries: [WorktreeEntry] = []
+    @State private var isLoadingWorktrees = false
 
-    // Section expansion states
-    @State private var sectionStates: SidebarSectionState = SidebarSectionState()
+    @State private var sectionStates = SidebarSectionState()
 
-    // Alerts
-    @State private var errorMessage: String = ""
+    @State private var errorMessage = ""
     @State private var showingError = false
     @State private var branchToDelete: String?
     @State private var showingDeleteConfirmation = false
@@ -111,6 +115,8 @@ struct SidebarView: View {
         onRequestFetchBranch: @escaping (String) -> Void,
         onRequestApplyStash: @escaping (String) -> Void = { _ in },
         onRequestDeleteStash: @escaping (String) -> Void = { _ in },
+        onRequestOpenWorktree: @escaping (URL) -> Void = { _ in },
+        onRequestOpenWorktreeInTerminal: @escaping (URL) -> Void = { _ in },
         onRequestSearch: @escaping () -> Void = {}
     ) {
         self.repositoryURL = repositoryURL
@@ -121,12 +127,13 @@ struct SidebarView: View {
         self.onRequestFetchBranch = onRequestFetchBranch
         self.onRequestApplyStash = onRequestApplyStash
         self.onRequestDeleteStash = onRequestDeleteStash
+        self.onRequestOpenWorktree = onRequestOpenWorktree
+        self.onRequestOpenWorktreeInTerminal = onRequestOpenWorktreeInTerminal
         self.onRequestSearch = onRequestSearch
     }
 
     var body: some View {
         List(selection: $selection) {
-            // WORKSPACE section
             Section(SidebarSection.workspace.rawValue) {
                 ForEach(SidebarSection.workspace.items) { item in
                     if item == .search {
@@ -143,7 +150,6 @@ struct SidebarView: View {
                 }
             }
 
-            // BRANCHES section
             Section {
                 if sectionStates.branchesExpanded {
                     if isLoadingBranches && branchNodes.isEmpty {
@@ -159,16 +165,37 @@ struct SidebarView: View {
                         if currentBranch.isEmpty && !headHash.isEmpty {
                             headRowView
                         }
+
                         ForEach(visibleBranchRows) { row in
                             branchRowView(for: row)
                         }
                     }
                 }
             } header: {
-                sectionHeader(SidebarSection.branches, isExpanded: sectionStates.branchesExpanded)
+                sectionHeader(.branches, isExpanded: sectionStates.branchesExpanded)
             }
 
-            // TAGS section
+            Section {
+                if sectionStates.worktreesExpanded {
+                    if isLoadingWorktrees && worktreeEntries.isEmpty {
+                        ProgressView()
+                            .scaleEffect(0.6)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, 4)
+                    } else if worktreeEntries.isEmpty {
+                        Text("No worktrees")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(worktreeEntries) { entry in
+                            worktreeRowView(for: entry)
+                        }
+                    }
+                }
+            } header: {
+                sectionHeader(.worktrees, isExpanded: sectionStates.worktreesExpanded)
+            }
+
             Section {
                 if sectionStates.tagsExpanded {
                     if isLoadingTags && tagNodes.isEmpty {
@@ -187,10 +214,9 @@ struct SidebarView: View {
                     }
                 }
             } header: {
-                sectionHeader(SidebarSection.tags, isExpanded: sectionStates.tagsExpanded)
+                sectionHeader(.tags, isExpanded: sectionStates.tagsExpanded)
             }
 
-            // REMOTES section
             Section {
                 if sectionStates.remotesExpanded {
                     if isLoadingRemotes && remoteNodes.isEmpty {
@@ -209,10 +235,9 @@ struct SidebarView: View {
                     }
                 }
             } header: {
-                sectionHeader(SidebarSection.remotes, isExpanded: sectionStates.remotesExpanded)
+                sectionHeader(.remotes, isExpanded: sectionStates.remotesExpanded)
             }
 
-            // STASHES section
             Section {
                 if sectionStates.stashesExpanded {
                     if isLoadingStashes && stashEntries.isEmpty {
@@ -231,10 +256,9 @@ struct SidebarView: View {
                     }
                 }
             } header: {
-                sectionHeader(SidebarSection.stashes, isExpanded: sectionStates.stashesExpanded)
+                sectionHeader(.stashes, isExpanded: sectionStates.stashesExpanded)
             }
 
-            // Other placeholder sections
             ForEach([SidebarSection.submodules, .subtrees], id: \.self) { section in
                 Section(section.rawValue) {
                     Text("Coming soon")
@@ -248,6 +272,7 @@ struct SidebarView: View {
         .task(id: repositoryURL) {
             loadSectionStates()
             await loadBranches()
+            await loadWorktrees()
             await loadTags()
             await loadRemotes()
             await loadStashes()
@@ -255,6 +280,7 @@ struct SidebarView: View {
         .onReceive(NotificationCenter.default.publisher(for: .repositoryDidChange)) { _ in
             Task {
                 await loadBranches()
+                await loadWorktrees()
                 await loadTags()
                 await loadRemotes()
                 await loadStashes()
@@ -277,8 +303,6 @@ struct SidebarView: View {
         }
     }
 
-    // MARK: - Section Header
-
     @ViewBuilder
     private func sectionHeader(_ section: SidebarSection, isExpanded: Bool) -> some View {
         HStack {
@@ -298,17 +322,13 @@ struct SidebarView: View {
     }
 
     private func loadSectionStates() {
-        let path = repositoryURL.path
-        sectionStates = SidebarSettingsStore.shared.state(for: path)
+        sectionStates = SidebarSettingsStore.shared.state(for: repositoryURL.path)
     }
 
     private func toggleSection(_ section: SidebarSection) {
-        let path = repositoryURL.path
-        SidebarSettingsStore.shared.toggleSection(section, for: path)
-        sectionStates = SidebarSettingsStore.shared.state(for: path)
+        SidebarSettingsStore.shared.toggleSection(section, for: repositoryURL.path)
+        sectionStates = SidebarSettingsStore.shared.state(for: repositoryURL.path)
     }
-
-    // MARK: - Tree Flattening
 
     private var visibleBranchRows: [BranchRowItem] {
         SidebarTreeBuilder.visibleRows(from: branchNodes, expandedFolders: expandedFolders)
@@ -321,8 +341,6 @@ struct SidebarView: View {
     private var visibleRemoteRows: [BranchRowItem] {
         SidebarTreeBuilder.visibleRows(from: remoteNodes, expandedFolders: expandedRemoteFolders)
     }
-
-    // MARK: - Row Rendering
 
     @ViewBuilder
     private var headRowView: some View {
@@ -361,7 +379,6 @@ struct SidebarView: View {
     @ViewBuilder
     private func branchRowView(for row: BranchRowItem) -> some View {
         let baseView = HStack(spacing: 4) {
-            // Indentation
             HStack(spacing: 0) {
                 ForEach(0..<row.indent, id: \.self) { _ in
                     Color.clear
@@ -369,25 +386,21 @@ struct SidebarView: View {
                 }
             }
 
-            // Icon
             if row.isFolder {
                 Image(systemName: expandedFolders.contains(row.fullPath) ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 16, alignment: .center)
+            } else if row.fullPath == currentBranch {
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 7))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 16, alignment: .center)
             } else {
-                if row.fullPath == currentBranch {
-                    Image(systemName: "circle.fill")
-                        .font(.system(size: 7))
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 16, alignment: .center)
-                } else {
-                    Color.clear
-                        .frame(width: 16)
-                }
+                Color.clear
+                    .frame(width: 16)
             }
 
-            // Name
             Text(row.name)
                 .font(.system(size: 12))
                 .fontWeight(row.fullPath == currentBranch && !row.isFolder ? .bold : .regular)
@@ -395,7 +408,6 @@ struct SidebarView: View {
 
             Spacer()
 
-            // Sync badge
             if !row.isFolder {
                 syncBadge(for: row.fullPath)
             }
@@ -423,6 +435,59 @@ struct SidebarView: View {
                     branchContextMenu(for: row.fullPath)
                 }
         }
+    }
+
+    @ViewBuilder
+    private func worktreeRowView(for entry: WorktreeEntry) -> some View {
+        let isMain = entry.path.standardizedFileURL == repositoryURL.standardizedFileURL
+        let baseView = HStack(spacing: 4) {
+            Image(systemName: entry.isLocked ? "lock.fill" : (isMain ? "circle.fill" : "folder"))
+                .font(.system(size: isMain ? 7 : 10))
+                .foregroundStyle(isMain ? Color.accentColor : .secondary)
+                .frame(width: 16, alignment: .center)
+
+            Text(entry.displayTitle)
+                .font(.system(size: 12))
+                .fontWeight(isMain ? .bold : .regular)
+                .italic(isMain)
+                .lineLimit(1)
+
+            if isMain {
+                Text("(this)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if !isMain, entry.dirtyCount > 0 {
+                Text("\(entry.dirtyCount)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.orange)
+                    .cornerRadius(4)
+            } else if !isMain, entry.dirtyCount < 0 {
+                Text("?")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+
+        baseView
+            .tag(SidebarSelection.worktree(entry.path))
+            .onTapGesture {
+                selection = .worktree(entry.path)
+            }
+            .onTapGesture(count: 2) {
+                onRequestOpenWorktree(entry.path)
+            }
+            .contextMenu {
+                worktreeContextMenu(for: entry)
+            }
     }
 
     @ViewBuilder
@@ -585,6 +650,7 @@ struct SidebarView: View {
                     .background(Color.secondary)
                     .cornerRadius(4)
                 }
+
                 if status.behind > 0 {
                     HStack(spacing: 2) {
                         Text("\(status.behind)")
@@ -624,8 +690,6 @@ struct SidebarView: View {
             expandedRemoteFolders.insert(path)
         }
     }
-
-    // MARK: - Context Menu
 
     @ViewBuilder
     private func branchContextMenu(for branch: String) -> some View {
@@ -684,7 +748,23 @@ struct SidebarView: View {
             .disabled(true)
     }
 
-    // MARK: - Actions
+    @ViewBuilder
+    private func worktreeContextMenu(for entry: WorktreeEntry) -> some View {
+        Button("Open in New Window") {
+            onRequestOpenWorktree(entry.path)
+        }
+
+        Button("Open in Terminal") {
+            onRequestOpenWorktreeInTerminal(entry.path)
+        }
+
+        Divider()
+
+        Button("Copy Path to Clipboard") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(entry.path.path, forType: .string)
+        }
+    }
 
     private func deleteBranch(_ branch: String) async {
         do {
@@ -692,13 +772,16 @@ struct SidebarView: View {
             let tip = try await support.tip(of: branch, in: repositoryURL)
             let upstream = await support.upstream(of: branch, in: repositoryURL)
             _ = try await GitStatusService.shared.deleteBranch(name: branch, force: false, in: repositoryURL)
+
             await MainActor.run {
                 var undoOperations: [GitUndoOperation] = [
                     .createLocalBranch(name: branch, startPoint: tip, checkout: false)
                 ]
+
                 if let upstream {
                     undoOperations.append(.setUpstream(branch: branch, upstream: upstream))
                 }
+
                 undoManager?.register(
                     GitUndoEntry(
                         repositoryURL: repositoryURL,
@@ -708,6 +791,7 @@ struct SidebarView: View {
                     )
                 )
             }
+
             NotificationCenter.default.post(name: .repositoryDidChange, object: nil, userInfo: ["repositoryURL": repositoryURL])
         } catch {
             await MainActor.run {
@@ -717,21 +801,17 @@ struct SidebarView: View {
         }
     }
 
-    // MARK: - Data Loading
-
     private func loadBranches() async {
         isLoadingBranches = true
         defer { isLoadingBranches = false }
+
         let locals = await GitStatusService.shared.localBranches(in: repositoryURL)
         let current = await GitStatusService.shared.currentBranch(in: repositoryURL) ?? ""
-        // Filter out HEAD entries (e.g., from detached HEAD state)
         let filteredLocals = locals.filter { $0 != "HEAD" && !$0.contains("HEAD detached") }
         let tree = SidebarTreeBuilder.buildTree(from: filteredLocals)
         let allFolders = collectFolderPaths(from: tree)
 
-        // Fetch sync status for each branch in parallel
         var syncMap: [String: BranchSyncStatus] = [:]
-        print("[loadBranches] Fetching sync status for \(locals.count) branches")
         await withTaskGroup(of: (String, BranchSyncStatus)?.self) { group in
             for branch in locals {
                 group.addTask {
@@ -741,22 +821,17 @@ struct SidebarView: View {
                     return nil
                 }
             }
+
             for await result in group {
                 if let (branch, status) = result {
                     syncMap[branch] = status
-                    print("[loadBranches] Got sync status for \(branch): ahead=\(status.ahead), behind=\(status.behind)")
                 }
             }
         }
-        print("[loadBranches] syncMap has \(syncMap.count) entries")
 
-        // Fetch HEAD hash when in detached HEAD state
-        var headHashValue: String = ""
-        if current.isEmpty {
-            let hash = await GitStatusService.shared.tipHash(for: "HEAD", in: repositoryURL)
-            if let hash = hash {
-                headHashValue = String(hash.prefix(7))
-            }
+        var headHashValue = ""
+        if current.isEmpty, let hash = await GitStatusService.shared.tipHash(for: "HEAD", in: repositoryURL) {
+            headHashValue = String(hash.prefix(7))
         }
 
         await MainActor.run {
@@ -764,18 +839,29 @@ struct SidebarView: View {
             currentBranch = current
             headHash = headHashValue
             branchSyncStatus = syncMap
-            print("[loadBranches] Updated branchSyncStatus with \(syncMap.count) entries")
             expandedFolders = SidebarTreeBuilder.expandedFolderPaths(revealing: current)
                 .intersection(allFolders)
+        }
+    }
+
+    private func loadWorktrees() async {
+        isLoadingWorktrees = true
+        defer { isLoadingWorktrees = false }
+
+        let entries = await GitStatusService.shared.worktrees(in: repositoryURL)
+        await MainActor.run {
+            worktreeEntries = entries
         }
     }
 
     private func loadTags() async {
         isLoadingTags = true
         defer { isLoadingTags = false }
+
         let tags = await GitStatusService.shared.tags(in: repositoryURL)
         let tree = SidebarTreeBuilder.buildTree(from: tags)
         let allFolders = collectFolderPaths(from: tree)
+
         await MainActor.run {
             tagNodes = tree
             if expandedTagFolders.isEmpty {
@@ -787,15 +873,16 @@ struct SidebarView: View {
     private func loadRemotes() async {
         isLoadingRemotes = true
         defer { isLoadingRemotes = false }
+
         let remotes = await GitStatusService.shared.remotes(in: repositoryURL)
         var branchesByRemote: [String: [String]] = [:]
         for remote in remotes {
             branchesByRemote[remote] = await GitStatusService.shared.remoteBranches(remote: remote, in: repositoryURL)
         }
+
         let tree = SidebarTreeBuilder.buildRemoteTree(remoteBranchesByRemote: branchesByRemote)
         await MainActor.run {
             remoteNodes = tree
-            // Keep folders collapsed by default on first load
             if expandedRemoteFolders.isEmpty {
                 expandedRemoteFolders = []
             }
@@ -805,21 +892,18 @@ struct SidebarView: View {
     private func loadStashes() async {
         isLoadingStashes = true
         defer { isLoadingStashes = false }
+
         let stashes = await GitStatusService.shared.stashes(in: repositoryURL)
         await MainActor.run {
             stashEntries = stashes
         }
     }
 
-    // MARK: - Tree Builder
-
     private func collectFolderPaths(from nodes: [BranchNode]) -> Set<String> {
         var paths = Set<String>()
-        for node in nodes {
-            if node.isFolder {
-                paths.insert(node.fullPath)
-                paths.formUnion(collectFolderPaths(from: node.children))
-            }
+        for node in nodes where node.isFolder {
+            paths.insert(node.fullPath)
+            paths.formUnion(collectFolderPaths(from: node.children))
         }
         return paths
     }
@@ -831,6 +915,8 @@ struct SidebarView: View {
         selection: .constant(nil),
         isBranchSyncing: { _ in false },
         onRequestCheckout: { _, _ in },
-        onRequestFetchBranch: { _ in }
+        onRequestFetchBranch: { _ in },
+        onRequestOpenWorktree: { _ in },
+        onRequestOpenWorktreeInTerminal: { _ in }
     )
 }

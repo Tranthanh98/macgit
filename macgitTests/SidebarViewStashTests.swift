@@ -26,4 +26,11 @@ final class SidebarViewStashTests: XCTestCase {
         XCTAssertTrue(updatedState.tagsExpanded)
         XCTAssertTrue(updatedState.remotesExpanded)
     }
+
+    func testSidebarSectionStateDecodesMissingWorktreesExpandedAsTrue() throws {
+        let data = #"{"branchesExpanded":true,"tagsExpanded":false}"#.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(SidebarSectionState.self, from: data)
+
+        XCTAssertTrue(decoded.worktreesExpanded)
+    }
 }
