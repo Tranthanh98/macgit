@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Completed on `codex/sourcegit-graph` on 2026-06-25.
+
 **Goal:** Port sourcegit's commit graph generation and rendering algorithm to macgit, replacing the current `CommitGraphLayoutEngine` and `BranchGraphCanvas` while preserving lazy loading and adding All Branches / Current Branch highlighting.
 
 **Architecture:** A new `CommitGraphGenerator` produces a `CommitGraphModel` (paths, links, dots, metadata) from the loaded `[Commit]` slice. `BranchGraphCanvas` renders that model using Bézier curves and sourcegit-style dots. `HistoryView` drives the generator with a highlighting mode derived from `showAllBranches` and a `headHash` resolved from refs.
@@ -31,7 +33,7 @@
 
 **Goal:** Define the sourcegit-aligned model types. Keep the old `GraphNode`/`GraphPath`/`GraphPoint`/`CommitGraphLayout` types in place temporarily; do not remove them yet.
 
-- [ ] **Step 1: Add `CommitGraphHighlighting` enum**
+- [x] **Step 1: Add `CommitGraphHighlighting` enum**
 
   ```swift
   enum CommitGraphHighlighting {
@@ -40,7 +42,7 @@
   }
   ```
 
-- [ ] **Step 2: Add `GraphCommitMetadata`**
+- [x] **Step 2: Add `GraphCommitMetadata`**
 
   ```swift
   struct GraphCommitMetadata {
@@ -50,7 +52,7 @@
   }
   ```
 
-- [ ] **Step 3: Add `GraphPath`, `GraphLink`, `GraphDotType`, `GraphDot`**
+- [x] **Step 3: Add `GraphPath`, `GraphLink`, `GraphDotType`, `GraphDot`**
 
   ```swift
   struct GraphPath {
@@ -82,7 +84,7 @@
   }
   ```
 
-- [ ] **Step 4: Add `CommitGraphModel`**
+- [x] **Step 4: Add `CommitGraphModel`**
 
   ```swift
   struct CommitGraphModel {
@@ -94,7 +96,7 @@
   }
   ```
 
-- [ ] **Step 5: Add `GraphPalette`**
+- [x] **Step 5: Add `GraphPalette`**
 
   ```swift
   struct GraphPalette {
@@ -117,12 +119,12 @@
   }
   ```
 
-- [ ] **Step 6: Build to verify**
+- [x] **Step 6: Build to verify**
 
   Run: `xcodebuild -project macgit.xcodeproj -scheme macgit -destination 'platform=macOS' build`
   Expected: succeeds (old types still present).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
   ```bash
   git add macgit/Views/History/CommitGraphTypes.swift
@@ -139,7 +141,7 @@
 
 **Goal:** Port sourcegit's `Models.CommitGraph.Generate` to Swift.
 
-- [ ] **Step 1: Create the test file with a helper factory**
+- [x] **Step 1: Create the test file with a helper factory**
 
   ```swift
   import XCTest
@@ -164,7 +166,7 @@
   }
   ```
 
-- [ ] **Step 2: Write failing linear-history test**
+- [x] **Step 2: Write failing linear-history test**
 
   ```swift
   func testLinearHistory() {
@@ -189,7 +191,7 @@
   Run: `xcodebuild -project macgit.xcodeproj -scheme macgit -destination 'platform=macOS' test -only-testing:macgitTests/CommitGraphGeneratorTests/testLinearHistory`
   Expected: build fails because `CommitGraphGenerator` does not exist.
 
-- [ ] **Step 3: Rename file and add skeleton generator**
+- [x] **Step 3: Rename file and add skeleton generator**
 
   Rename `macgit/Views/History/CommitGraphLayoutEngine.swift` to `macgit/Views/History/CommitGraphGenerator.swift`.
 
@@ -217,12 +219,12 @@
 
   Update the Xcode project if needed so the renamed file is still in the target.
 
-- [ ] **Step 4: Run linear test again**
+- [x] **Step 4: Run linear test again**
 
   Run: `xcodebuild ... -only-testing:macgitTests/CommitGraphGeneratorTests/testLinearHistory`
   Expected: fails on `XCTAssertEqual(model.dots.count, 3)` (dots is empty).
 
-- [ ] **Step 5: Implement full generator port**
+- [x] **Step 5: Implement full generator port**
 
   Implement `CommitGraphGenerator.generate` with `PathHelper` and `ColorPicker` classes following the design spec and sourcegit's `Models/CommitGraph.cs`.
 
@@ -234,12 +236,12 @@
   - Record dot position, path points, links, and metadata.
   - End unsolved paths at `endY = (commits.count - 0.5) * unitHeight`.
 
-- [ ] **Step 6: Run linear test**
+- [x] **Step 6: Run linear test**
 
   Run: `xcodebuild ... -only-testing:macgitTests/CommitGraphGeneratorTests/testLinearHistory`
   Expected: passes.
 
-- [ ] **Step 7: Add and verify merge test**
+- [x] **Step 7: Add and verify merge test**
 
   ```swift
   func testFeatureBranchAndMerge() {
@@ -263,7 +265,7 @@
 
   Run and verify passes.
 
-- [ ] **Step 8: Add octopus merge test**
+- [x] **Step 8: Add octopus merge test**
 
   ```swift
   func testOctopusMerge() {
@@ -286,7 +288,7 @@
 
   Run and verify passes.
 
-- [ ] **Step 9: Add current-branch highlighting test**
+- [x] **Step 9: Add current-branch highlighting test**
 
   ```swift
   func testCurrentBranchOnlyHighlighting() {
@@ -309,7 +311,7 @@
 
   Run and verify passes.
 
-- [ ] **Step 10: Add lazy-loading boundary test**
+- [x] **Step 10: Add lazy-loading boundary test**
 
   ```swift
   func testMissingParentDrawsContinuationPath() {
@@ -329,7 +331,7 @@
 
   Run and verify passes.
 
-- [ ] **Step 11: Add remote branch head test**
+- [x] **Step 11: Add remote branch head test**
 
   ```swift
   func testRemoteBranchHeadCreatesNewPath() {
@@ -349,7 +351,7 @@
 
   Run and verify passes.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
   ```bash
   git mv macgit/Views/History/CommitGraphLayoutEngine.swift macgit/Views/History/CommitGraphGenerator.swift
@@ -368,7 +370,7 @@
 
 **Goal:** Render `CommitGraphModel` with Bézier paths, merge links, and sourcegit-style dots.
 
-- [ ] **Step 1: Update `BranchGraphCanvas` signature and frame**
+- [x] **Step 1: Update `BranchGraphCanvas` signature and frame**
 
   ```swift
   struct BranchGraphCanvas: View {
@@ -395,7 +397,7 @@
   }
   ```
 
-- [ ] **Step 2: Update existing canvas tests to compile**
+- [x] **Step 2: Update existing canvas tests to compile**
 
   Temporarily change `BranchGraphCanvasTests.swift` to use `CommitGraphModel`.
 
@@ -409,7 +411,7 @@
   )
   ```
 
-- [ ] **Step 3: Implement path drawing**
+- [x] **Step 3: Implement path drawing**
 
   Convert sourcegit graph-unit coordinates to points and build the `Path`:
 
@@ -457,7 +459,7 @@
 
   Adjust curve control points to match sourcegit's exact geometry.
 
-- [ ] **Step 4: Implement link drawing**
+- [x] **Step 4: Implement link drawing**
 
   Draw each `GraphLink` as a quadratic Bézier:
 
@@ -474,7 +476,7 @@
   }
   ```
 
-- [ ] **Step 5: Implement dot drawing**
+- [x] **Step 5: Implement dot drawing**
 
   Use `GraphicsContext` to draw circles and lines:
 
@@ -519,7 +521,7 @@
   }
   ```
 
-- [ ] **Step 6: Update tests for new primitives**
+- [x] **Step 6: Update tests for new primitives**
 
   Replace `BranchGraphCanvasTests.swift` contents with tests for:
   - straight vertical path bounds,
@@ -528,12 +530,12 @@
   - merge link bounds,
   - dot path bounds for default/head/merge.
 
-- [ ] **Step 7: Run canvas tests**
+- [x] **Step 7: Run canvas tests**
 
   Run: `xcodebuild -project macgit.xcodeproj -scheme macgit -destination 'platform=macOS' test -only-testing:macgitTests/BranchGraphCanvasTests`
   Expected: all pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
   ```bash
   git add macgit/Views/History/BranchGraphCanvas.swift macgitTests/BranchGraphCanvasTests.swift
@@ -551,7 +553,7 @@
 
 **Goal:** Drive the new generator from `HistoryView` and keep the UI working.
 
-- [ ] **Step 1: Update graph state type**
+- [x] **Step 1: Update graph state type**
 
   In `HistoryView.swift`:
 
@@ -561,7 +563,7 @@
 
   Replace usages of `graphLayout` with `graphModel`.
 
-- [ ] **Step 2: Resolve head hash**
+- [x] **Step 2: Resolve head hash**
 
   Add a helper:
 
@@ -576,7 +578,7 @@
   }
   ```
 
-- [ ] **Step 3: Replace layout call with generator call**
+- [x] **Step 3: Replace layout call with generator call**
 
   In `loadHistory`:
 
@@ -590,7 +592,7 @@
   )
   ```
 
-- [ ] **Step 4: Update graph width calculation**
+- [x] **Step 4: Update graph width calculation**
 
   ```swift
   private var graphWidth: CGFloat {
@@ -598,7 +600,7 @@
   }
   ```
 
-- [ ] **Step 5: Update canvas usage**
+- [x] **Step 5: Update canvas usage**
 
   Replace:
   ```swift
@@ -613,7 +615,7 @@
   BranchGraphCanvas(model: model)
   ```
 
-- [ ] **Step 6: Update commit list iteration**
+- [x] **Step 6: Update commit list iteration**
 
   `CommitRowView` only needs the commit; the graph dot color is stored in `model.dots`. Iterate commits directly:
 
@@ -632,7 +634,7 @@
 
   Update `CommitRowView` to accept a `Commit` directly instead of a `GraphNode`.
 
-- [ ] **Step 7: Add HistoryView test for highlighting mode mapping**
+- [x] **Step 7: Add HistoryView test for highlighting mode mapping**
 
   Add a small pure helper on `HistoryView` (or test the mapping inline):
 
@@ -653,12 +655,12 @@
   }
   ```
 
-- [ ] **Step 8: Build and run HistoryView tests**
+- [x] **Step 8: Build and run HistoryView tests**
 
   Run: `xcodebuild ... test -only-testing:macgitTests/HistoryViewTests`
   Expected: passes.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
   ```bash
   git add macgit/Views/History/HistoryView.swift macgit/Views/History/CommitRowView.swift macgitTests/HistoryViewTests.swift
@@ -675,7 +677,7 @@
 
 **Goal:** Remove obsolete types and ensure the full build + test suite is green.
 
-- [ ] **Step 1: Remove old types from CommitGraphTypes.swift**
+- [x] **Step 1: Remove old types from CommitGraphTypes.swift**
 
   Delete:
   - `GraphNode`
@@ -686,21 +688,21 @@
 
   Keep only the new types defined in Task 1 plus `GraphPalette`.
 
-- [ ] **Step 2: Update any remaining references**
+- [x] **Step 2: Update any remaining references**
 
   Search for `CommitGraphLayout`, old `GraphPath`, `GraphPoint` across the project and update or remove.
 
-- [ ] **Step 3: Run full build**
+- [x] **Step 3: Run full build**
 
   Run: `xcodebuild -project macgit.xcodeproj -scheme macgit -destination 'platform=macOS' build`
   Expected: succeeds with zero warnings about the removed types.
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite**
 
   Run: `xcodebuild -project macgit.xcodeproj -scheme macgit -destination 'platform=macOS' test`
   Expected: all tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add macgit/Views/History/CommitGraphTypes.swift

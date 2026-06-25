@@ -1,6 +1,7 @@
 import XCTest
 @testable import macgit
 
+@MainActor
 final class HistoryPaginationTests: XCTestCase {
     func testCommitHistoryPageSkipsOlderCommits() async throws {
         let repoURL = try makeRepoWithLinearHistory(commitCount: 6)
@@ -77,21 +78,30 @@ final class HistoryPaginationTests: XCTestCase {
 
     func testGraphLayoutStableAcrossPagination() async throws {
         let url = try makeRepoWithFeatureBranch()
+        let headHash = await GitStatusService.shared.tipHash(for: "HEAD", in: url)
 
         let page1 = await GitStatusService.shared.commitHistory(allBranches: true, limit: 3, skip: 0, in: url)
         XCTAssertEqual(page1.count, 3)
-        let layout1 = CommitGraphLayoutEngine.layout(commits: page1)
+        let model1 = CommitGraphGenerator.generate(
+            commits: page1,
+            highlighting: .all,
+            headHash: headHash
+        )
 
         let page2 = await GitStatusService.shared.commitHistory(allBranches: true, limit: 3, skip: 3, in: url)
         let combined = page1 + page2
-        let layout2 = CommitGraphLayoutEngine.layout(commits: combined)
+        let model2 = CommitGraphGenerator.generate(
+            commits: combined,
+            highlighting: .all,
+            headHash: headHash
+        )
 
-        XCTAssertEqual(layout1.nodes.count, 3)
-        XCTAssertEqual(layout2.nodes.count, 6)
+        XCTAssertEqual(model1.dots.count, 3)
+        XCTAssertEqual(model2.dots.count, 6)
 
-        for i in layout1.nodes.indices {
-            XCTAssertEqual(layout1.nodes[i].lane, layout2.nodes[i].lane)
-            XCTAssertEqual(layout1.nodes[i].commit.hash, layout2.nodes[i].commit.hash)
+        for index in model1.dots.indices {
+            XCTAssertEqual(model1.dots[index].lane, model2.dots[index].lane)
+            XCTAssertEqual(model1.dots[index].center.x, model2.dots[index].center.x)
         }
     }
 

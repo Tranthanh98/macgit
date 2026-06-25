@@ -5,8 +5,7 @@
 
 import Foundation
 
-struct Commit: Identifiable, Equatable {
-    let id = UUID()
+nonisolated struct Commit: Identifiable, Equatable, Sendable {
     let hash: String
     let parents: [String]
     let message: String
@@ -14,6 +13,8 @@ struct Commit: Identifiable, Equatable {
     let email: String
     let date: Date
     let refs: [String]
+
+    var id: String { hash }
     
     var shortHash: String {
         String(hash.prefix(7))

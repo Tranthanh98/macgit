@@ -6,7 +6,7 @@
 import SwiftUI
 
 struct CommitRowView: View {
-    let node: GraphNode
+    let commit: Commit
     let graphWidth: CGFloat
     let isSelected: Bool
     let messageWidth: CGFloat
@@ -15,13 +15,7 @@ struct CommitRowView: View {
     let commitWidth: CGFloat
 
     private var authorText: String {
-        "\(node.commit.author) <\(node.commit.email)>"
-    }
-
-    private var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm d MMM yyyy"
-        return formatter.string(from: node.commit.date)
+        "\(commit.author) <\(commit.email)>"
     }
 
     var body: some View {
@@ -33,14 +27,14 @@ struct CommitRowView: View {
 
             // Message + ref labels (share the message column width)
             HStack(spacing: 4) {
-                Text(node.commit.message)
+                Text(commit.message)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
 
-                if !node.commit.refs.isEmpty {
+                if !commit.refs.isEmpty {
                     HStack(spacing: 4) {
-                        ForEach(node.commit.refs.prefix(3), id: \.self) { ref in
+                        ForEach(commit.refs.prefix(3), id: \.self) { ref in
                             RefLabel(text: ref)
                         }
                     }
@@ -56,14 +50,22 @@ struct CommitRowView: View {
                 .frame(width: authorWidth, alignment: .leading)
 
             // Date
-            Text(formattedDate)
+            Text(
+                commit.date,
+                format: .dateTime
+                    .hour()
+                    .minute()
+                    .day()
+                    .month(.abbreviated)
+                    .year()
+            )
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .frame(width: dateWidth, alignment: .trailing)
 
             // Hash
-            Text(node.commit.shortHash)
+            Text(commit.shortHash)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(.tertiary)
                 .lineLimit(1)
