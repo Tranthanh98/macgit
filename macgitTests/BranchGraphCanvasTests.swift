@@ -4,7 +4,7 @@ import XCTest
 @MainActor
 final class BranchGraphCanvasTests: XCTestCase {
     func testStraightVerticalPathReachesEnd() {
-        let graphPath = SourceGit.GraphPath(
+        let graphPath = GraphPath(
             points: [
                 CGPoint(x: 10, y: 0.5),
                 CGPoint(x: 10, y: 2.5),
@@ -26,7 +26,7 @@ final class BranchGraphCanvasTests: XCTestCase {
     }
 
     func testLaneChangingPathUsesCurveAndReachesTarget() {
-        let graphPath = SourceGit.GraphPath(
+        let graphPath = GraphPath(
             points: [
                 CGPoint(x: 10, y: 0.5),
                 CGPoint(x: 22, y: 1.5),
@@ -49,7 +49,7 @@ final class BranchGraphCanvasTests: XCTestCase {
     }
 
     func testSinglePointPathIsEmpty() {
-        let graphPath = SourceGit.GraphPath(
+        let graphPath = GraphPath(
             points: [CGPoint(x: 10, y: 0.5)],
             colorIndex: 0,
             isHighlighted: true
@@ -65,7 +65,7 @@ final class BranchGraphCanvasTests: XCTestCase {
     }
 
     func testMergeLinkUsesQuadraticCurve() {
-        let link = SourceGit.GraphLink(
+        let link = GraphLink(
             start: CGPoint(x: 10, y: 0.5),
             control: CGPoint(x: 22, y: 0.5),
             end: CGPoint(x: 22, y: 1),
@@ -90,11 +90,11 @@ final class BranchGraphCanvasTests: XCTestCase {
         let center = CGPoint(x: 10, y: 0.5)
 
         for (type, expectedSize) in [
-            (SourceGit.GraphDotType.default, 8.0),
+            (GraphDotType.default, 8.0),
             (.head, 12.0),
             (.merge, 12.0),
         ] {
-            let dot = SourceGit.GraphDot(
+            let dot = GraphDot(
                 center: center,
                 lane: 0,
                 type: type,

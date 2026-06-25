@@ -14,7 +14,7 @@ struct HistoryView: View {
     private static let historyScrollSpaceName = "historyScroll"
     
     @State private var commits: [Commit] = []
-    @State private var graphModel: SourceGit.CommitGraphModel? = nil
+    @State private var graphModel: CommitGraphModel? = nil
     @State private var selectedCommit: Commit? = nil
     @State private var fileChanges: [CommitFileChange] = []
     @State private var selectedFile: CommitFileChange? = nil
@@ -510,7 +510,7 @@ struct HistoryView: View {
                                 // Commit rows overlay
                                 LazyVStack(alignment: .leading, spacing: 0) {
                                     if graphModel != nil {
-                                        ForEach(Array(commits.enumerated()), id: \.element.hash) { index, commit in
+                                        ForEach(commits) { commit in
                                             CommitRowView(
                                                 commit: commit,
                                                 graphWidth: graphWidth,
@@ -539,7 +539,7 @@ struct HistoryView: View {
                                                 commitContextMenu(for: commit)
                                             }
                                             .onAppear {
-                                                if index == commits.count - 1 {
+                                                if commit.hash == commits.last?.hash {
                                                     Task {
                                                         await loadOlderHistoryIfNeeded()
                                                     }
@@ -861,9 +861,10 @@ struct HistoryView: View {
                 in: repositoryURL
             )
         }
-        let newGraphModel = CommitGraphGenerator.generate(
+        let highlighting = Self.highlighting(for: showAllBranches)
+        let newGraphModel = await CommitGraphGenerator.generateAsync(
             commits: loadedCommits,
-            highlighting: Self.highlighting(for: showAllBranches),
+            highlighting: highlighting,
             headHash: headHash
         )
 
@@ -1245,7 +1246,7 @@ struct HistoryView: View {
 
     static func highlighting(
         for showAllBranches: Bool
-    ) -> SourceGit.CommitGraphHighlighting {
+    ) -> CommitGraphHighlighting {
         showAllBranches ? .all : .currentBranchOnly
     }
 

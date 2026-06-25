@@ -18,12 +18,6 @@ struct CommitRowView: View {
         "\(commit.author) <\(commit.email)>"
     }
 
-    private var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm d MMM yyyy"
-        return formatter.string(from: commit.date)
-    }
-
     var body: some View {
         HStack(spacing: 0) {
             // Fixed-width spacer so all commit messages align regardless of lane count
@@ -56,7 +50,15 @@ struct CommitRowView: View {
                 .frame(width: authorWidth, alignment: .leading)
 
             // Date
-            Text(formattedDate)
+            Text(
+                commit.date,
+                format: .dateTime
+                    .hour()
+                    .minute()
+                    .day()
+                    .month(.abbreviated)
+                    .year()
+            )
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

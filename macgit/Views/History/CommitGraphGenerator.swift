@@ -1,25 +1,38 @@
 //
-//  CommitGraphLayoutEngine.swift
+//  CommitGraphGenerator.swift
 //  macgit
 //
 
 import Foundation
-import SwiftUI
 
-enum CommitGraphGenerator {
+nonisolated enum CommitGraphGenerator {
     private static let unitWidth = 12.0
     private static let halfWidth = 6.0
     private static let unitHeight = 1.0
     private static let halfHeight = 0.5
     private static let firstLaneX = 10.0
+    private static let colorCount = 10
+
+    @concurrent
+    static func generateAsync(
+        commits: [Commit],
+        highlighting: CommitGraphHighlighting,
+        headHash: String?
+    ) async -> CommitGraphModel {
+        generate(
+            commits: commits,
+            highlighting: highlighting,
+            headHash: headHash
+        )
+    }
 
     static func generate(
         commits: [Commit],
-        highlighting: SourceGit.CommitGraphHighlighting,
+        highlighting: CommitGraphHighlighting,
         headHash: String?
-    ) -> SourceGit.CommitGraphModel {
+    ) -> CommitGraphModel {
         guard !commits.isEmpty else {
-            return SourceGit.CommitGraphModel(
+            return CommitGraphModel(
                 paths: [],
                 links: [],
                 dots: [],
@@ -38,13 +51,13 @@ enum CommitGraphGenerator {
         )
 
         var mutablePaths: [MutableGraphPath] = []
-        var links: [SourceGit.GraphLink] = []
-        var dots: [SourceGit.GraphDot] = []
-        var metadata: [String: SourceGit.GraphCommitMetadata] = [:]
+        var links: [GraphLink] = []
+        var dots: [GraphDot] = []
+        var metadata: [String: GraphCommitMetadata] = [:]
         var unsolved: [PathHelper] = []
         var ended: [PathHelper] = []
         var offsetY = -halfHeight
-        var colorPicker = ColorPicker(colorCount: SourceGit.GraphPalette.colors.count)
+        var colorPicker = ColorPicker(colorCount: colorCount)
         var maxLane = 0
 
         for commit in commits {
@@ -124,7 +137,7 @@ enum CommitGraphGenerator {
             let dotLane = lane(forX: position.x)
             maxLane = max(maxLane, dotLane)
 
-            let dotType: SourceGit.GraphDotType
+            let dotType: GraphDotType
             if commit.hash == headHash || commit.refs.contains(where: {
                 $0 == "HEAD" || $0.hasPrefix("HEAD -> ")
             }) {
@@ -136,7 +149,7 @@ enum CommitGraphGenerator {
             }
 
             dots.append(
-                SourceGit.GraphDot(
+                GraphDot(
                     center: position,
                     lane: dotLane,
                     type: dotType,
@@ -163,7 +176,7 @@ enum CommitGraphGenerator {
                     }
 
                     links.append(
-                        SourceGit.GraphLink(
+                        GraphLink(
                             start: position,
                             control: CGPoint(x: parent.lastX, y: position.y),
                             end: CGPoint(x: parent.lastX, y: offsetY + halfHeight),
@@ -186,7 +199,7 @@ enum CommitGraphGenerator {
                     maxLane = max(maxLane, lane(forX: target.x))
 
                     links.append(
-                        SourceGit.GraphLink(
+                        GraphLink(
                             start: position,
                             control: CGPoint(x: target.x, y: position.y),
                             end: target,
@@ -197,7 +210,7 @@ enum CommitGraphGenerator {
                 }
             }
 
-            metadata[commit.hash] = SourceGit.GraphCommitMetadata(
+            metadata[commit.hash] = GraphCommitMetadata(
                 colorIndex: dotColor,
                 isHighlighted: isHighlighted,
                 leftMargin: max(offsetX, maxOffsetOld) + halfWidth + 2
@@ -218,14 +231,14 @@ enum CommitGraphGenerator {
         }
 
         let paths = mutablePaths.map {
-            SourceGit.GraphPath(
+            GraphPath(
                 points: $0.points,
                 colorIndex: $0.colorIndex,
                 isHighlighted: $0.isHighlighted
             )
         }
 
-        return SourceGit.CommitGraphModel(
+        return CommitGraphModel(
             paths: paths,
             links: links,
             dots: dots,
@@ -260,7 +273,7 @@ enum CommitGraphGenerator {
     }
 }
 
-private final class MutableGraphPath {
+nonisolated private final class MutableGraphPath {
     var points: [CGPoint]
     let colorIndex: Int
     let isHighlighted: Bool
@@ -272,7 +285,7 @@ private final class MutableGraphPath {
     }
 }
 
-private final class PathHelper {
+nonisolated private final class PathHelper {
     private(set) var path: MutableGraphPath
     var next: String
     private(set) var lastX: Double
@@ -361,7 +374,7 @@ private final class PathHelper {
     }
 }
 
-private struct ColorPicker {
+nonisolated private struct ColorPicker {
     private let colorCount: Int
     private var queue: [Int] = []
 
@@ -379,208 +392,5 @@ private struct ColorPicker {
     mutating func recycle(_ index: Int) {
         guard !queue.contains(index) else { return }
         queue.append(index)
-    }
-}
-
-enum CommitGraphLayoutEngine {
-    /// Builds a lane/edge layout for commits assumed to be in reverse chronological
-    /// order (newest first). Each commit's parents are resolved by hash; parents that
-    /// are not present in `commits` (e.g. beyond `maxCount`) become placeholder
-    /// vertices so merge connectors can still be drawn.
-    static func layout(commits: [Commit]) -> CommitGraphLayout {
-        guard !commits.isEmpty else {
-            return CommitGraphLayout(nodes: [], paths: [], laneCount: 1)
-        }
-
-        // Phase 1: build vertices
-        var vertices = buildVertices(commits: commits)
-
-        // Phase 2: assign branches
-        let branches = assignBranches(vertices: &vertices)
-
-        // Phase 3: route paths
-        let paths = routePaths(vertices: vertices, branches: branches)
-
-        // Build public nodes
-        let nodes = vertices.enumerated().compactMap { (row, vertex) -> GraphNode? in
-            guard let commit = vertex.commit else { return nil }
-            return GraphNode(commit: commit, lane: vertex.lane, rowIndex: row)
-        }
-
-        let laneCount = (vertices.map(\.lane).max() ?? 0) + 1
-
-        return CommitGraphLayout(nodes: nodes, paths: paths, laneCount: laneCount)
-    }
-
-    // MARK: - Phase 1: Vertex Graph
-
-    private static func buildVertices(commits: [Commit]) -> [Vertex] {
-        var rowByHash: [String: Int] = [:]
-        for (row, commit) in commits.enumerated() {
-            rowByHash[commit.hash] = row
-        }
-
-        var vertices: [Vertex] = []
-        var placeholderRows: [String: Int] = [:]
-
-        func placeholderRow(for hash: String) -> Int {
-            if let row = placeholderRows[hash] { return row }
-            let row = commits.count + placeholderRows.count
-            placeholderRows[hash] = row
-            return row
-        }
-
-        for (row, commit) in commits.enumerated() {
-            let parentRows = commit.parents.map { rowByHash[$0] ?? placeholderRow(for: $0) }
-            vertices.append(Vertex(row: row, commit: commit, parentRows: parentRows, childRows: []))
-        }
-
-        let sortedPlaceholders = placeholderRows.sorted { $0.value < $1.value }
-        for (_, row) in sortedPlaceholders {
-            vertices.append(Vertex(row: row, commit: nil, parentRows: [], childRows: []))
-        }
-
-        for (row, _) in commits.enumerated() {
-            for parentRow in vertices[row].parentRows {
-                vertices[parentRow].childRows.append(row)
-            }
-        }
-
-        return vertices
-    }
-
-    // MARK: - Phase 2: Branch Assignment
-
-    private static func assignBranches(vertices: inout [Vertex]) -> [Branch] {
-        var branches: [Branch] = []
-        var colorPool = BranchColorPool()
-
-        for row in 0..<vertices.count {
-            let vertex = vertices[row]
-            guard vertex.commit != nil else { continue }
-            guard vertex.branchID == nil else { continue }
-
-            let branch = Branch(id: branches.count, color: colorPool.allocate(), startRow: row)
-            branch.vertices.append(vertex)
-            vertices[row].branchID = branch.id
-            branches.append(branch)
-
-            var currentRow = row
-            while true {
-                let current = vertices[currentRow]
-                guard let nextParentRow = firstParentRow(for: current) else {
-                    branch.endRow = currentRow
-                    break
-                }
-
-                guard nextParentRow != currentRow else {
-                    branch.endRow = currentRow
-                    break
-                }
-
-                let parent = vertices[nextParentRow]
-                if parent.branchID != nil {
-                    branch.endRow = currentRow
-                    break
-                }
-
-                vertices[nextParentRow].branchID = branch.id
-                branch.vertices.append(parent)
-                branch.endRow = nextParentRow
-                currentRow = nextParentRow
-            }
-        }
-
-        return branches
-    }
-
-    private static func firstParentRow(for vertex: Vertex) -> Int? {
-        guard !vertex.parentRows.isEmpty else { return nil }
-        return vertex.parentRows[0]
-    }
-
-    // MARK: - Phase 3: Path Routing
-
-    private static func routePaths(vertices: [Vertex], branches: [Branch]) -> [GraphPath] {
-        var paths: [GraphPath] = []
-
-        for branch in branches {
-            // Main branch path
-            var points: [GraphPoint] = []
-            for row in branch.startRow...branch.endRow {
-                points.append(GraphPoint(row: row, lane: vertices[row].lane))
-            }
-            if points.count > 1 {
-                paths.append(GraphPath(points: points, color: branch.color, isMergeConnector: false))
-            }
-
-            // Merge connectors
-            for vertex in branch.vertices {
-                guard vertex.parentRows.count > 1 else { continue }
-                for parentRow in vertex.parentRows.dropFirst() {
-                    let parent = vertices[parentRow]
-                    let parentBranch = parent.branchID.map { branches[$0] }
-                    let parentLane = parentBranch?.id ?? branch.id
-                    var connectorPoints: [GraphPoint] = []
-                    for row in vertex.row...parentRow {
-                        let lane = row == vertex.row ? vertex.lane : parentLane
-                        connectorPoints.append(GraphPoint(row: row, lane: lane))
-                    }
-                    if connectorPoints.count > 1 {
-                        let color = parentBranch?.color ?? branch.color
-                        paths.append(GraphPath(points: connectorPoints, color: color, isMergeConnector: true))
-                    }
-                }
-            }
-        }
-
-        return paths
-    }
-}
-
-// MARK: - Internal Layout Types
-
-private final class Branch {
-    let id: Int
-    let color: Color
-    var startRow: Int
-    var endRow: Int
-    var vertices: [Vertex] = []
-
-    init(id: Int, color: Color, startRow: Int) {
-        self.id = id
-        self.color = color
-        self.startRow = startRow
-        self.endRow = startRow
-    }
-}
-
-private final class Vertex {
-    let row: Int
-    let commit: Commit?
-    var parentRows: [Int]
-    var childRows: [Int]
-    var branchID: Int?
-
-    init(row: Int, commit: Commit?, parentRows: [Int], childRows: [Int], branchID: Int? = nil) {
-        self.row = row
-        self.commit = commit
-        self.parentRows = parentRows
-        self.childRows = childRows
-        self.branchID = branchID
-    }
-
-    var lane: Int { branchID ?? 0 }
-    var isMerge: Bool { parentRows.count > 1 }
-}
-
-private struct BranchColorPool {
-    private let palette = LaneColors.palette
-    private var nextColorIndex = 0
-
-    mutating func allocate() -> Color {
-        let color = palette[nextColorIndex % palette.count]
-        nextColorIndex += 1
-        return color
     }
 }

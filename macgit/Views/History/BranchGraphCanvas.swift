@@ -6,53 +6,15 @@
 import SwiftUI
 
 struct BranchGraphCanvas: View {
-    let model: SourceGit.CommitGraphModel
+    let model: CommitGraphModel
 
     let rowHeight: CGFloat = 24
     let laneWidth: CGFloat = 14
     let dotSize: CGFloat = 8
     let graphTrailingPadding: CGFloat = 8
 
-    init(model: SourceGit.CommitGraphModel) {
+    init(model: CommitGraphModel) {
         self.model = model
-    }
-
-    /// Temporary compatibility initializer while HistoryView still uses the
-    /// legacy graph model. Removed when the integration task switches it to
-    /// CommitGraphGenerator.
-    init(nodes: [GraphNode], paths: [GraphPath], laneCount: Int) {
-        let convertedPaths = paths.map { path in
-            SourceGit.GraphPath(
-                points: path.points.map {
-                    CGPoint(
-                        x: 10 + Double($0.lane) * 12,
-                        y: Double($0.row) + 0.5
-                    )
-                },
-                colorIndex: path.points.first?.lane ?? 0,
-                isHighlighted: true
-            )
-        }
-        let dots = nodes.map { node in
-            SourceGit.GraphDot(
-                center: CGPoint(
-                    x: 10 + Double(node.lane) * 12,
-                    y: Double(node.rowIndex) + 0.5
-                ),
-                lane: node.lane,
-                type: node.commit.isMerge ? .merge : .default,
-                colorIndex: node.lane,
-                isHighlighted: true
-            )
-        }
-
-        self.model = SourceGit.CommitGraphModel(
-            paths: convertedPaths,
-            links: [],
-            dots: dots,
-            laneCount: laneCount,
-            commitMetadata: [:]
-        )
     }
 
     var body: some View {
@@ -78,21 +40,6 @@ struct BranchGraphCanvas: View {
             lineJoin: .round
         )
 
-        for link in model.links {
-            context.stroke(
-                Self.linkPath(
-                    for: link,
-                    rowHeight: rowHeight,
-                    laneWidth: laneWidth
-                ),
-                with: .color(lineColor(
-                    colorIndex: link.colorIndex,
-                    isHighlighted: link.isHighlighted
-                )),
-                style: strokeStyle
-            )
-        }
-
         for graphPath in model.paths {
             context.stroke(
                 Self.path(
@@ -108,6 +55,21 @@ struct BranchGraphCanvas: View {
             )
         }
 
+        for link in model.links {
+            context.stroke(
+                Self.linkPath(
+                    for: link,
+                    rowHeight: rowHeight,
+                    laneWidth: laneWidth
+                ),
+                with: .color(lineColor(
+                    colorIndex: link.colorIndex,
+                    isHighlighted: link.isHighlighted
+                )),
+                style: strokeStyle
+            )
+        }
+
         for dot in model.dots {
             drawDot(dot, in: &context)
         }
@@ -115,12 +77,12 @@ struct BranchGraphCanvas: View {
 
     private func lineColor(colorIndex: Int, isHighlighted: Bool) -> Color {
         isHighlighted
-            ? SourceGit.GraphPalette.color(for: colorIndex)
+            ? GraphPalette.color(for: colorIndex)
             : Color.gray.opacity(0.4)
     }
 
     private func drawDot(
-        _ dot: SourceGit.GraphDot,
+        _ dot: GraphDot,
         in context: inout GraphicsContext
     ) {
         let center = Self.position(
@@ -182,7 +144,7 @@ struct BranchGraphCanvas: View {
     }
 
     static func path(
-        for graphPath: SourceGit.GraphPath,
+        for graphPath: GraphPath,
         rowHeight: CGFloat,
         laneWidth: CGFloat
     ) -> Path {
@@ -234,7 +196,7 @@ struct BranchGraphCanvas: View {
     }
 
     static func linkPath(
-        for link: SourceGit.GraphLink,
+        for link: GraphLink,
         rowHeight: CGFloat,
         laneWidth: CGFloat
     ) -> Path {
@@ -260,7 +222,7 @@ struct BranchGraphCanvas: View {
     }
 
     static func dotPath(
-        for dot: SourceGit.GraphDot,
+        for dot: GraphDot,
         rowHeight: CGFloat,
         laneWidth: CGFloat,
         dotSize: CGFloat
