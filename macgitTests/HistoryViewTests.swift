@@ -1,7 +1,13 @@
 import XCTest
 @testable import macgit
 
+@MainActor
 final class HistoryViewTests: XCTestCase {
+    func testShowAllBranchesMapsToGraphHighlighting() {
+        XCTAssertEqual(HistoryView.highlighting(for: true), .all)
+        XCTAssertEqual(HistoryView.highlighting(for: false), .currentBranchOnly)
+    }
+
     func testHistoryScopeUsesSelectedBranchWhenShowingSingleBranch() {
         let scope = HistoryView.historyScope(selectedBranch: "feature/login", showAllBranches: false)
 

@@ -14,7 +14,7 @@ struct HistoryView: View {
     private static let historyScrollSpaceName = "historyScroll"
     
     @State private var commits: [Commit] = []
-    @State private var graphLayout: CommitGraphLayout? = nil
+    @State private var graphModel: SourceGit.CommitGraphModel? = nil
     @State private var selectedCommit: Commit? = nil
     @State private var fileChanges: [CommitFileChange] = []
     @State private var selectedFile: CommitFileChange? = nil
@@ -396,7 +396,7 @@ struct HistoryView: View {
     // MARK: - Top Panel
     
     private var graphWidth: CGFloat {
-        let maxLane = graphLayout?.laneCount ?? 1
+        let maxLane = graphModel?.laneCount ?? 1
         return CGFloat(maxLane) * 14 + 8
     }
 
@@ -502,48 +502,44 @@ struct HistoryView: View {
                         ScrollView(.vertical) {
                             ZStack(alignment: .topLeading) {
                                 // Graph lines
-                                if let layout = graphLayout {
-                                    BranchGraphCanvas(
-                                        nodes: layout.nodes,
-                                        paths: layout.paths,
-                                        laneCount: layout.laneCount
-                                    )
+                                if let model = graphModel {
+                                    BranchGraphCanvas(model: model)
                                     .padding(.leading, 4)
                                 }
 
                                 // Commit rows overlay
                                 LazyVStack(alignment: .leading, spacing: 0) {
-                                    if let layout = graphLayout {
-                                        ForEach(Array(layout.nodes.enumerated()), id: \.element.id) { index, node in
+                                    if graphModel != nil {
+                                        ForEach(Array(commits.enumerated()), id: \.element.hash) { index, commit in
                                             CommitRowView(
-                                                node: node,
+                                                commit: commit,
                                                 graphWidth: graphWidth,
-                                                isSelected: selectedCommit?.hash == node.commit.hash,
+                                                isSelected: selectedCommit?.hash == commit.hash,
                                                 messageWidth: effectiveMessageWidth,
                                                 authorWidth: CGFloat(authorColumnWidth),
                                                 dateWidth: CGFloat(dateColumnWidth),
                                                 commitWidth: CGFloat(commitColumnWidth)
                                             )
-                                            .id(node.commit.hash)
+                                            .id(commit.hash)
                                             .background(
                                                 GeometryReader { geo in
                                                     Color.clear.preference(
                                                         key: CommitRowFramePreferenceKey.self,
-                                                        value: [node.commit.hash: geo.frame(in: .named(Self.historyScrollSpaceName))]
+                                                        value: [commit.hash: geo.frame(in: .named(Self.historyScrollSpaceName))]
                                                     )
                                                 }
                                             )
                                             .contentShape(Rectangle())
                                             .onClick(left: {
-                                                selectedCommit = node.commit
+                                                selectedCommit = commit
                                             }, right: {
-                                                selectedCommit = node.commit
+                                                selectedCommit = commit
                                             })
                                             .contextMenu {
-                                                commitContextMenu(for: node.commit)
+                                                commitContextMenu(for: commit)
                                             }
                                             .onAppear {
-                                                if index == layout.nodes.count - 1 {
+                                                if index == commits.count - 1 {
                                                     Task {
                                                         await loadOlderHistoryIfNeeded()
                                                     }
@@ -792,7 +788,7 @@ struct HistoryView: View {
                 rowFrames = [:]
                 cancelHistoryRefreshIndicator()
                 if commits.isEmpty {
-                    graphLayout = nil
+                    graphModel = nil
                     selectedCommit = nil
                     fileChanges = []
                     selectedFile = nil
@@ -850,13 +846,30 @@ struct HistoryView: View {
             newScrollTarget = newCommits.first?.hash
         }
 
-        await MainActor.run {
+        let loadedCommits = await MainActor.run {
             if reset || skip == 0 {
-                commits = newCommits
-            } else {
-                commits.append(contentsOf: newCommits)
+                return newCommits
             }
-            graphLayout = CommitGraphLayoutEngine.layout(commits: commits)
+            return commits + newCommits
+        }
+        let headHash: String?
+        if let decoratedHead = Self.resolvedHeadHash(from: loadedCommits) {
+            headHash = decoratedHead
+        } else {
+            headHash = await GitStatusService.shared.tipHash(
+                for: "HEAD",
+                in: repositoryURL
+            )
+        }
+        let newGraphModel = CommitGraphGenerator.generate(
+            commits: loadedCommits,
+            highlighting: Self.highlighting(for: showAllBranches),
+            headHash: headHash
+        )
+
+        await MainActor.run {
+            commits = loadedCommits
+            graphModel = newGraphModel
             if let newSelectedCommit {
                 selectedCommit = newSelectedCommit
                 if skip == 0 {
@@ -1228,6 +1241,20 @@ struct HistoryView: View {
             return .ref(selectedBranch)
         }
         return .currentBranch
+    }
+
+    static func highlighting(
+        for showAllBranches: Bool
+    ) -> SourceGit.CommitGraphHighlighting {
+        showAllBranches ? .all : .currentBranchOnly
+    }
+
+    static func resolvedHeadHash(from commits: [Commit]) -> String? {
+        commits.first(where: { commit in
+            commit.refs.contains {
+                $0 == "HEAD" || $0.hasPrefix("HEAD -> ")
+            }
+        })?.hash
     }
 
     static func shouldAutoCenterCommit(
