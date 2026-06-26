@@ -74,6 +74,10 @@ enum WorktreeCreationMode: String, CaseIterable {
     case newBranch = "New Branch"
 }
 
+enum WorktreeHeaderAction: String, CaseIterable {
+    case prune = "Prune Worktrees..."
+}
+
 struct SidebarView: View {
     let repositoryURL: URL
     @Binding var selection: SidebarSelection?
@@ -105,8 +109,23 @@ struct SidebarView: View {
     @State private var isLoadingWorktrees = false
     @State private var worktreeToLabel: WorktreeEntry?
     @State private var worktreeLabelInput = ""
+    @State private var worktreeToLock: WorktreeEntry?
+    @State private var worktreeLockReasonInput = ""
+    @State private var isUpdatingWorktreeLock = false
+    @State private var worktreeToMove: WorktreeEntry?
+    @State private var worktreeMovePathInput = ""
+    @State private var worktreeMoveErrorMessage: String?
+    @State private var isMovingWorktree = false
+    @State private var worktreeToCheckout: WorktreeEntry?
+    @State private var availableWorktreeCheckoutBranches: [String] = []
+    @State private var selectedWorktreeCheckoutBranch = ""
+    @State private var worktreeCheckoutErrorMessage: String?
+    @State private var isCheckingOutWorktreeBranch = false
+    @State private var pendingWorktreeForceCheckout: WorktreeEntry?
+    @State private var showingWorktreeForceCheckoutConfirmation = false
     @State private var pendingWorktreeRemoval: WorktreeEntry?
     @State private var showingWorktreeRemovalConfirmation = false
+    @State private var showingPruneWorktreesConfirmation = false
     @State private var createWorktreeMode: WorktreeCreationMode = .existingBranch
     @State private var availableWorktreeBranches: [String] = []
     @State private var currentWorktreeBranch = ""
@@ -334,8 +353,37 @@ struct SidebarView: View {
         } message: {
             Text(worktreeRemovalMessage)
         }
+        .alert("Force Switch Branch", isPresented: $showingWorktreeForceCheckoutConfirmation) {
+            Button("Cancel", role: .cancel) {
+                pendingWorktreeForceCheckout = nil
+            }
+            Button("Force Switch", role: .destructive) {
+                if let entry = pendingWorktreeForceCheckout {
+                    Task { await checkoutWorktree(entry, force: true) }
+                }
+            }
+        } message: {
+            Text("This worktree has uncommitted changes. Force checkout and discard conflicting changes?")
+        }
+        .alert("Prune Worktrees", isPresented: $showingPruneWorktreesConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Prune", role: .destructive) {
+                Task { await pruneWorktrees() }
+            }
+        } message: {
+            Text("Remove stale worktree metadata and orphaned labels for paths that no longer exist?")
+        }
         .sheet(item: $worktreeToLabel) { _ in
             worktreeLabelSheet
+        }
+        .sheet(item: $worktreeToLock) { _ in
+            worktreeLockSheet
+        }
+        .sheet(item: $worktreeToMove) { _ in
+            worktreeMoveSheet
+        }
+        .sheet(item: $worktreeToCheckout) { _ in
+            worktreeCheckoutSheet
         }
         .sheet(isPresented: $showingCreateWorktreeSheet) {
             createWorktreeSheet
@@ -356,6 +404,18 @@ struct SidebarView: View {
                 .labelStyle(.iconOnly)
                 .buttonStyle(.plain)
                 .help("Create Worktree")
+
+                Menu {
+                    Button(WorktreeHeaderAction.prune.rawValue) {
+                        showingPruneWorktreesConfirmation = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(.secondary)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                .help("Worktree Actions")
             }
             Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                 .font(.system(size: 10, weight: .medium))
@@ -399,6 +459,19 @@ struct SidebarView: View {
         case .newBranch:
             return !sanitizedWorktreeBranchName(newWorktreeBranchName).isEmpty
         }
+    }
+
+    private var canMoveWorktree: Bool {
+        guard let entry = worktreeToMove else { return false }
+        let trimmedPath = worktreeMovePathInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPath.isEmpty else { return false }
+
+        let candidate = URL(fileURLWithPath: trimmedPath).standardizedFileURL.path
+        return candidate != entry.path.standardizedFileURL.path
+    }
+
+    private var canCheckoutWorktreeBranch: Bool {
+        !selectedWorktreeCheckoutBranch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var worktreeRemovalNeedsForce: Bool {
@@ -857,6 +930,26 @@ struct SidebarView: View {
         Divider()
 
         if !isCurrentRepositoryWorktree(entry) {
+            if entry.isLocked {
+                Button("Unlock Worktree") {
+                    Task { await unlockWorktree(entry) }
+                }
+            } else {
+                Button("Lock Worktree...") {
+                    beginLockingWorktree(entry)
+                }
+            }
+
+            Button("Rename/Move Worktree...") {
+                beginMovingWorktree(entry)
+            }
+
+            Button("Switch Branch...") {
+                Task { await prepareCheckoutWorktreeSheet(for: entry) }
+            }
+
+            Divider()
+
             Button("Remove Worktree...", role: .destructive) {
                 pendingWorktreeRemoval = entry
                 showingWorktreeRemovalConfirmation = true
@@ -908,6 +1001,176 @@ struct SidebarView: View {
                         Task { await saveWorktreeLabel() }
                     }
                     .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(24)
+            .frame(minWidth: 420, idealWidth: 480)
+        } else {
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var worktreeLockSheet: some View {
+        if let entry = worktreeToLock {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Lock Worktree")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Worktree:")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Text(entry.path.path)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Reason (optional):")
+                        .font(.system(size: 13))
+                    TextField("Reason", text: $worktreeLockReasonInput)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                HStack(spacing: 12) {
+                    Spacer()
+                    Button("Cancel", role: .cancel) {
+                        worktreeToLock = nil
+                        worktreeLockReasonInput = ""
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(isUpdatingWorktreeLock)
+
+                    Button("Lock") {
+                        Task { await lockWorktree(entry) }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isUpdatingWorktreeLock)
+                }
+            }
+            .padding(24)
+            .frame(minWidth: 420, idealWidth: 480)
+        } else {
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var worktreeMoveSheet: some View {
+        if let entry = worktreeToMove {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Rename/Move Worktree")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Current path:")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Text(entry.path.path)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("New path:")
+                        .font(.system(size: 13))
+                    TextField("", text: $worktreeMovePathInput)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                if let worktreeMoveErrorMessage {
+                    Text(worktreeMoveErrorMessage)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 12) {
+                    Spacer()
+                    Button("Cancel", role: .cancel) {
+                        worktreeToMove = nil
+                        worktreeMovePathInput = ""
+                        worktreeMoveErrorMessage = nil
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(isMovingWorktree)
+
+                    Button("Move") {
+                        Task { await moveWorktree(entry) }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canMoveWorktree || isMovingWorktree)
+                }
+            }
+            .padding(24)
+            .frame(minWidth: 460, idealWidth: 520)
+        } else {
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var worktreeCheckoutSheet: some View {
+        if let entry = worktreeToCheckout {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Switch Worktree Branch")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Worktree:")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                    Text(entry.path.path)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Branch:")
+                        .font(.system(size: 13))
+                    Picker("", selection: $selectedWorktreeCheckoutBranch) {
+                        ForEach(availableWorktreeCheckoutBranches, id: \.self) { branch in
+                            Text(branch).tag(branch)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+
+                if let worktreeCheckoutErrorMessage {
+                    Text(worktreeCheckoutErrorMessage)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 12) {
+                    Spacer()
+                    Button("Cancel", role: .cancel) {
+                        worktreeToCheckout = nil
+                        worktreeCheckoutErrorMessage = nil
+                        selectedWorktreeCheckoutBranch = ""
+                        availableWorktreeCheckoutBranches = []
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(isCheckingOutWorktreeBranch)
+
+                    Button("Switch") {
+                        if entry.dirtyCount > 0 {
+                            pendingWorktreeForceCheckout = entry
+                            showingWorktreeForceCheckoutConfirmation = true
+                        } else {
+                            Task { await checkoutWorktree(entry, force: false) }
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canCheckoutWorktreeBranch || isCheckingOutWorktreeBranch)
                 }
             }
             .padding(24)
@@ -1168,6 +1431,17 @@ struct SidebarView: View {
         worktreeLabelInput = entry.label ?? ""
     }
 
+    private func beginLockingWorktree(_ entry: WorktreeEntry) {
+        worktreeToLock = entry
+        worktreeLockReasonInput = ""
+    }
+
+    private func beginMovingWorktree(_ entry: WorktreeEntry) {
+        worktreeToMove = entry
+        worktreeMovePathInput = suggestedMovedWorktreePath(for: entry).path
+        worktreeMoveErrorMessage = nil
+    }
+
     private func saveWorktreeLabel() async {
         guard let entry = worktreeToLabel else { return }
 
@@ -1189,6 +1463,59 @@ struct SidebarView: View {
     private func clearWorktreeLabel(_ entry: WorktreeEntry) async {
         do {
             try await GitStatusService.shared.removeWorktreeLabel(for: entry.path, in: repositoryURL)
+            await loadWorktrees()
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                showingError = true
+            }
+        }
+    }
+
+    private func lockWorktree(_ entry: WorktreeEntry) async {
+        await MainActor.run {
+            isUpdatingWorktreeLock = true
+        }
+        defer {
+            Task { @MainActor in
+                isUpdatingWorktreeLock = false
+            }
+        }
+
+        do {
+            try await GitStatusService.shared.lockWorktree(
+                at: entry.path,
+                reason: worktreeLockReasonInput,
+                in: repositoryURL
+            )
+            await loadWorktrees()
+            await MainActor.run {
+                worktreeToLock = nil
+                worktreeLockReasonInput = ""
+            }
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                showingError = true
+            }
+        }
+    }
+
+    private func unlockWorktree(_ entry: WorktreeEntry) async {
+        do {
+            try await GitStatusService.shared.unlockWorktree(at: entry.path, in: repositoryURL)
+            await loadWorktrees()
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                showingError = true
+            }
+        }
+    }
+
+    private func pruneWorktrees() async {
+        do {
+            try await GitStatusService.shared.pruneWorktrees(in: repositoryURL)
             await loadWorktrees()
         } catch {
             await MainActor.run {
@@ -1277,6 +1604,13 @@ struct SidebarView: View {
         return trimmed.isEmpty ? "worktree" : trimmed
     }
 
+    private func suggestedMovedWorktreePath(for entry: WorktreeEntry) -> URL {
+        let currentPath = entry.path.standardizedFileURL
+        let parent = currentPath.deletingLastPathComponent()
+        let newName = currentPath.lastPathComponent + "-renamed"
+        return parent.appendingPathComponent(newName, isDirectory: true)
+    }
+
     private func createWorktree() async {
         let path = URL(fileURLWithPath: worktreePathInput)
         let target: WorktreeAddTarget
@@ -1321,6 +1655,83 @@ struct SidebarView: View {
         } catch {
             await MainActor.run {
                 worktreeCreationErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func moveWorktree(_ entry: WorktreeEntry) async {
+        await MainActor.run {
+            isMovingWorktree = true
+            worktreeMoveErrorMessage = nil
+        }
+        defer {
+            Task { @MainActor in
+                isMovingWorktree = false
+            }
+        }
+
+        let destination = URL(fileURLWithPath: worktreeMovePathInput)
+
+        do {
+            try await GitStatusService.shared.moveWorktree(from: entry.path, to: destination, in: repositoryURL)
+            await loadWorktrees()
+            await MainActor.run {
+                worktreeToMove = nil
+                worktreeMovePathInput = ""
+                worktreeMoveErrorMessage = nil
+            }
+        } catch {
+            await MainActor.run {
+                worktreeMoveErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func prepareCheckoutWorktreeSheet(for entry: WorktreeEntry) async {
+        let branches = await GitStatusService.shared.localBranches(in: repositoryURL).filter { !$0.isEmpty }
+        let selectedBranch = branches.contains(entry.branch ?? "") ? (entry.branch ?? "") : (branches.first ?? "")
+
+        await MainActor.run {
+            worktreeToCheckout = entry
+            availableWorktreeCheckoutBranches = branches
+            selectedWorktreeCheckoutBranch = selectedBranch
+            worktreeCheckoutErrorMessage = nil
+            pendingWorktreeForceCheckout = nil
+            showingWorktreeForceCheckoutConfirmation = false
+        }
+    }
+
+    private func checkoutWorktree(_ entry: WorktreeEntry, force: Bool) async {
+        await MainActor.run {
+            isCheckingOutWorktreeBranch = true
+            worktreeCheckoutErrorMessage = nil
+            showingWorktreeForceCheckoutConfirmation = false
+        }
+        defer {
+            Task { @MainActor in
+                isCheckingOutWorktreeBranch = false
+            }
+        }
+
+        do {
+            try await GitStatusService.shared.checkoutBranch(
+                selectedWorktreeCheckoutBranch,
+                inWorktree: entry.path,
+                force: force,
+                repositoryURL: repositoryURL
+            )
+            await loadWorktrees()
+            await MainActor.run {
+                worktreeToCheckout = nil
+                worktreeCheckoutErrorMessage = nil
+                selectedWorktreeCheckoutBranch = ""
+                availableWorktreeCheckoutBranches = []
+                pendingWorktreeForceCheckout = nil
+            }
+        } catch {
+            await MainActor.run {
+                worktreeCheckoutErrorMessage = error.localizedDescription
+                pendingWorktreeForceCheckout = nil
             }
         }
     }

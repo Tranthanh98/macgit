@@ -130,6 +130,76 @@ extension GitStatusService {
         await postRepositoryDidChange(for: repositoryURL)
     }
 
+    func lockWorktree(at path: URL, reason: String?, in repositoryURL: URL) async throws {
+        try throwIfMainWorktree(path, repositoryURL: repositoryURL, action: "locked")
+
+        var arguments = ["worktree", "lock"]
+        let trimmedReason = reason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedReason.isEmpty {
+            arguments.append("--reason")
+            arguments.append(trimmedReason)
+        }
+        arguments.append(path.path)
+
+        _ = try await runGit(arguments: arguments, in: repositoryURL)
+        await postRepositoryDidChange(for: repositoryURL)
+    }
+
+    func unlockWorktree(at path: URL, in repositoryURL: URL) async throws {
+        try throwIfMainWorktree(path, repositoryURL: repositoryURL, action: "unlocked")
+
+        _ = try await runGit(arguments: ["worktree", "unlock", path.path], in: repositoryURL)
+        await postRepositoryDidChange(for: repositoryURL)
+    }
+
+    func pruneWorktrees(in repositoryURL: URL) async throws {
+        _ = try await runGit(arguments: ["worktree", "prune"], in: repositoryURL)
+
+        let entries = await worktrees(in: repositoryURL)
+        let gitDirectory = try await gitCommonDirectory(in: repositoryURL)
+        try WorktreeLabelStore().prune(validPaths: Set(entries.map(\.path)), in: gitDirectory)
+        await postRepositoryDidChange(for: repositoryURL)
+    }
+
+    func moveWorktree(from oldPath: URL, to newPath: URL, in repositoryURL: URL) async throws {
+        try throwIfMainWorktree(oldPath, repositoryURL: repositoryURL, action: "moved")
+
+        let normalizedNewPath = newPath.standardizedFileURL
+        if normalizedNewPath.path.isEmpty {
+            throw GitError.commandFailed("Target path is required.")
+        }
+        if FileManager.default.fileExists(atPath: normalizedNewPath.path) {
+            throw GitError.commandFailed("Target path already exists.")
+        }
+
+        _ = try await runGit(arguments: ["worktree", "move", oldPath.path, normalizedNewPath.path], in: repositoryURL)
+
+        let gitDirectory = try await gitCommonDirectory(in: repositoryURL)
+        try WorktreeLabelStore().moveLabel(from: oldPath, to: normalizedNewPath, in: gitDirectory)
+        await postRepositoryDidChange(for: repositoryURL)
+    }
+
+    func checkoutBranch(
+        _ branch: String,
+        inWorktree worktreePath: URL,
+        force: Bool,
+        repositoryURL: URL
+    ) async throws {
+        let trimmedBranch = branch.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedBranch.isEmpty {
+            throw GitError.commandFailed("Branch name is required.")
+        }
+
+        var arguments = ["checkout"]
+        if force {
+            arguments.append("--force")
+        }
+        arguments.append(trimmedBranch)
+
+        _ = try await runGit(arguments: arguments, in: worktreePath)
+        await postRepositoryDidChange(for: repositoryURL)
+    }
+
     private struct ParsedWorktree {
         let path: URL
         let head: String
@@ -200,6 +270,12 @@ extension GitStatusService {
 
     private func normalizedWorktreePath(_ url: URL) -> String {
         WorktreeLabelStore.key(for: url)
+    }
+
+    private func throwIfMainWorktree(_ path: URL, repositoryURL: URL, action: String) throws {
+        if isMainWorktree(path, repositoryURL: repositoryURL) {
+            throw GitError.commandFailed("The main worktree cannot be \(action).")
+        }
     }
 
     @MainActor

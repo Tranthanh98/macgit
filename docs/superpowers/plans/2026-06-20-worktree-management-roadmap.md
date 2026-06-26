@@ -17,7 +17,7 @@
 - Phase 1: [completed] [2026-06-20-worktree-phase-1-list-open.md](2026-06-20-worktree-phase-1-list-open.md) (branch: `codex/worktree-phase-1-list-open`)
 - Phase 2: [completed] [2026-06-20-worktree-phase-2-label-store.md](2026-06-20-worktree-phase-2-label-store.md) (branch: `codex/worktree-phase-2-label-store`, merge: `0184c06`)
 - Phase 3: [completed] [2026-06-20-worktree-phase-3-create-remove.md](2026-06-20-worktree-phase-3-create-remove.md) (branch: `codex/worktree-phase-3-create-remove`)
-- Phase 4: [pending] 2026-06-20-worktree-phase-4-lock-prune-move-checkout.md
+- Phase 4: [completed] [2026-06-20-worktree-phase-4-lock-prune-move-checkout.md](2026-06-20-worktree-phase-4-lock-prune-move-checkout.md) (branch: `codex/worktree-phase-4-lock-prune-move-checkout`)
 
 ## Recommended Order
 

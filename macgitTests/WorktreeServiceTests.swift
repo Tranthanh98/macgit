@@ -2,6 +2,296 @@ import XCTest
 @testable import macgit
 
 final class WorktreeServiceTests: XCTestCase {
+    func testLockWorktreeWithReasonSetsLockedStateAndPostsRepositoryDidChange() async throws {
+        let repoURL = try makeTempRepo()
+        let wtPath = repoURL.appendingPathComponent(".worktrees/feature-ui")
+        try await GitStatusService.shared.addWorktree(
+            at: wtPath,
+            target: .existingBranch("feature"),
+            label: nil,
+            in: repoURL
+        )
+        let expectation = expectation(forNotification: .repositoryDidChange, object: nil) { notification in
+            (notification.userInfo?["repositoryURL"] as? URL)?.path == repoURL.path
+        }
+
+        try await GitStatusService.shared.lockWorktree(
+            at: wtPath,
+            reason: "Long running agent task",
+            in: repoURL
+        )
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+
+        let entries = await GitStatusService.shared.worktrees(in: repoURL)
+        let porcelain = try runGitCapture(["worktree", "list", "--porcelain"], in: repoURL)
+        XCTAssertEqual(linkedWorktree(at: wtPath, in: entries)?.isLocked, true)
+        XCTAssertTrue(porcelain.contains("locked Long running agent task"))
+    }
+
+    func testLockWorktreeWithoutReasonSucceeds() async throws {
+        let repoURL = try makeTempRepo()
+        let wtPath = repoURL.appendingPathComponent(".worktrees/feature-ui")
+        try await GitStatusService.shared.addWorktree(
+            at: wtPath,
+            target: .existingBranch("feature"),
+            label: nil,
+            in: repoURL
+        )
+
+        try await GitStatusService.shared.lockWorktree(at: wtPath, reason: nil, in: repoURL)
+
+        let entries = await GitStatusService.shared.worktrees(in: repoURL)
+        XCTAssertEqual(linkedWorktree(at: wtPath, in: entries)?.isLocked, true)
+    }
+
+    func testUnlockWorktreeClearsLockedStateAndPostsRepositoryDidChange() async throws {
+        let repoURL = try makeTempRepo()
+        let wtPath = repoURL.appendingPathComponent(".worktrees/feature-ui")
+        try await GitStatusService.shared.addWorktree(
+            at: wtPath,
+            target: .existingBranch("feature"),
+            label: nil,
+            in: repoURL
+        )
+        try runGit(["worktree", "lock", wtPath.path], in: repoURL)
+        let expectation = expectation(forNotification: .repositoryDidChange, object: nil) { notification in
+            (notification.userInfo?["repositoryURL"] as? URL)?.path == repoURL.path
+        }
+
+        try await GitStatusService.shared.unlockWorktree(at: wtPath, in: repoURL)
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+
+        let entries = await GitStatusService.shared.worktrees(in: repoURL)
+        XCTAssertEqual(linkedWorktree(at: wtPath, in: entries)?.isLocked, false)
+    }
+
+    func testLockAndUnlockRejectMainWorktree() async throws {
+        let repoURL = try makeTempRepo()
+
+        do {
+            try await GitStatusService.shared.lockWorktree(at: repoURL, reason: "no", in: repoURL)
+            XCTFail("Expected lockWorktree to reject the main worktree")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("main"))
+        }
+
+        do {
+            try await GitStatusService.shared.unlockWorktree(at: repoURL, in: repoURL)
+            XCTFail("Expected unlockWorktree to reject the main worktree")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("main"))
+        }
+    }
+
+    func testPruneWorktreesRemovesMissingLinkedWorktreeAndOrphanLabel() async throws {
+        let repoURL = try makeTempRepo()
+        let keptPath = repoURL.appendingPathComponent(".worktrees/feature-ui")
+        let prunedPath = repoURL.appendingPathComponent(".worktrees/old-ui")
+        try await GitStatusService.shared.addWorktree(
+            at: keptPath,
+            target: .existingBranch("feature"),
+            label: "Keep",
+            in: repoURL
+        )
+        try await GitStatusService.shared.addWorktree(
+            at: prunedPath,
+            target: .newBranch(name: "old-ui", base: "main"),
+            label: "Prune me",
+            in: repoURL
+        )
+        try FileManager.default.removeItem(at: prunedPath)
+        let gitDirectory = try await GitStatusService.shared.gitCommonDirectory(in: repoURL)
+        let expectation = expectation(forNotification: .repositoryDidChange, object: nil) { notification in
+            (notification.userInfo?["repositoryURL"] as? URL)?.path == repoURL.path
+        }
+
+        try await GitStatusService.shared.pruneWorktrees(in: repoURL)
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+
+        let entries = await GitStatusService.shared.worktreesWithLabels(in: repoURL)
+        let porcelain = try runGitCapture(["worktree", "list", "--porcelain"], in: repoURL)
+        XCTAssertNotNil(linkedWorktree(at: keptPath, in: entries))
+        XCTAssertNil(linkedWorktree(at: prunedPath, in: entries))
+        XCTAssertTrue(porcelain.contains(keptPath.path))
+        XCTAssertFalse(porcelain.contains(prunedPath.path))
+        XCTAssertEqual(WorktreeLabelStore().label(for: keptPath, in: gitDirectory), "Keep")
+        XCTAssertNil(WorktreeLabelStore().label(for: prunedPath, in: gitDirectory))
+    }
+
+    func testMoveWorktreeMovesDirectoryAndLabelAndPostsRepositoryDidChange() async throws {
+        let repoURL = try makeTempRepo()
+        let oldPath = repoURL.appendingPathComponent(".worktrees/feature-ui")
+        let newPath = repoURL.appendingPathComponent(".worktrees/feature-ui-renamed")
+        try await GitStatusService.shared.addWorktree(
+            at: oldPath,
+            target: .existingBranch("feature"),
+            label: "Review UI",
+            in: repoURL
+        )
+        let gitDirectory = try await GitStatusService.shared.gitCommonDirectory(in: repoURL)
+        let expectation = expectation(forNotification: .repositoryDidChange, object: nil) { notification in
+            (notification.userInfo?["repositoryURL"] as? URL)?.path == repoURL.path
+        }
+
+        try await GitStatusService.shared.moveWorktree(from: oldPath, to: newPath, in: repoURL)
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+
+        let entries = await GitStatusService.shared.worktreesWithLabels(in: repoURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldPath.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: newPath.path))
+        XCTAssertNil(WorktreeLabelStore().label(for: oldPath, in: gitDirectory))
+        XCTAssertEqual(WorktreeLabelStore().label(for: newPath, in: gitDirectory), "Review UI")
+        XCTAssertEqual(linkedWorktree(at: newPath, in: entries)?.label, "Review UI")
+    }
+
+    func testMoveWorktreeRejectsExistingTargetPath() async throws {
+        let repoURL = try makeTempRepo()
+        let oldPath = repoURL.appendingPathComponent(".worktrees/feature-ui")
+        let newPath = repoURL.appendingPathComponent(".worktrees/existing-target")
+        try await GitStatusService.shared.addWorktree(
+            at: oldPath,
+            target: .existingBranch("feature"),
+            label: "Review UI",
+            in: repoURL
+        )
+        try FileManager.default.createDirectory(at: newPath, withIntermediateDirectories: true)
+        let gitDirectory = try await GitStatusService.shared.gitCommonDirectory(in: repoURL)
+
+        do {
+            try await GitStatusService.shared.moveWorktree(from: oldPath, to: newPath, in: repoURL)
+            XCTFail("Expected moveWorktree to reject an existing target path")
+        } catch {
+            XCTAssertFalse(error.localizedDescription.isEmpty)
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: oldPath.path))
+        XCTAssertEqual(WorktreeLabelStore().label(for: oldPath, in: gitDirectory), "Review UI")
+        XCTAssertNil(WorktreeLabelStore().label(for: newPath, in: gitDirectory))
+    }
+
+    func testMoveWorktreeRejectsMainWorktree() async throws {
+        let repoURL = try makeTempRepo()
+        let newPath = repoURL.appendingPathComponent(".worktrees/main-renamed")
+
+        do {
+            try await GitStatusService.shared.moveWorktree(from: repoURL, to: newPath, in: repoURL)
+            XCTFail("Expected moveWorktree to reject moving the main worktree")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("main"))
+        }
+    }
+
+    func testCheckoutBranchInWorktreeSwitchesBranchAndPostsRepositoryDidChange() async throws {
+        let repoURL = try makeTempRepo()
+        let wtPath = repoURL.appendingPathComponent(".worktrees/feature-ui")
+        try runGit(["branch", "release"], in: repoURL)
+        try await GitStatusService.shared.addWorktree(
+            at: wtPath,
+            target: .existingBranch("feature"),
+            label: nil,
+            in: repoURL
+        )
+        let expectation = expectation(forNotification: .repositoryDidChange, object: nil) { notification in
+            (notification.userInfo?["repositoryURL"] as? URL)?.path == repoURL.path
+        }
+
+        try await GitStatusService.shared.checkoutBranch(
+            "release",
+            inWorktree: wtPath,
+            force: false,
+            repositoryURL: repoURL
+        )
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+
+        let entries = await GitStatusService.shared.worktrees(in: repoURL)
+        let branch = try runGitCapture(["branch", "--show-current"], in: wtPath).trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(branch, "release")
+        XCTAssertEqual(linkedWorktree(at: wtPath, in: entries)?.branch, "release")
+    }
+
+    func testCheckoutBranchInDirtyWorktreeRequiresForce() async throws {
+        let repoURL = try makeTempRepo()
+        let wtPath = repoURL.appendingPathComponent(".worktrees/feature-ui")
+        try createReleaseBranchWithConflictingTrackedChange(in: repoURL)
+        try await GitStatusService.shared.addWorktree(
+            at: wtPath,
+            target: .existingBranch("feature"),
+            label: nil,
+            in: repoURL
+        )
+        try "dirty\n".write(to: wtPath.appendingPathComponent("tracked.txt"), atomically: true, encoding: .utf8)
+
+        do {
+            try await GitStatusService.shared.checkoutBranch(
+                "release",
+                inWorktree: wtPath,
+                force: false,
+                repositoryURL: repoURL
+            )
+            XCTFail("Expected checkoutBranch to fail for a dirty worktree without force")
+        } catch {
+            XCTAssertFalse(error.localizedDescription.isEmpty)
+        }
+
+        let branch = try runGitCapture(["branch", "--show-current"], in: wtPath).trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(branch, "feature")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: wtPath.appendingPathComponent("tracked.txt").path))
+    }
+
+    func testCheckoutBranchInDirtyWorktreeWithForceSucceeds() async throws {
+        let repoURL = try makeTempRepo()
+        let wtPath = repoURL.appendingPathComponent(".worktrees/feature-ui")
+        try createReleaseBranchWithConflictingTrackedChange(in: repoURL)
+        try await GitStatusService.shared.addWorktree(
+            at: wtPath,
+            target: .existingBranch("feature"),
+            label: nil,
+            in: repoURL
+        )
+        try "dirty\n".write(to: wtPath.appendingPathComponent("tracked.txt"), atomically: true, encoding: .utf8)
+
+        try await GitStatusService.shared.checkoutBranch(
+            "release",
+            inWorktree: wtPath,
+            force: true,
+            repositoryURL: repoURL
+        )
+
+        let branch = try runGitCapture(["branch", "--show-current"], in: wtPath).trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(branch, "release")
+    }
+
+    func testCheckoutBranchInWorktreeRejectsMissingBranch() async throws {
+        let repoURL = try makeTempRepo()
+        let wtPath = repoURL.appendingPathComponent(".worktrees/feature-ui")
+        try await GitStatusService.shared.addWorktree(
+            at: wtPath,
+            target: .existingBranch("feature"),
+            label: nil,
+            in: repoURL
+        )
+
+        do {
+            try await GitStatusService.shared.checkoutBranch(
+                "missing-branch",
+                inWorktree: wtPath,
+                force: false,
+                repositoryURL: repoURL
+            )
+            XCTFail("Expected checkoutBranch to reject a missing branch")
+        } catch {
+            XCTAssertFalse(error.localizedDescription.isEmpty)
+        }
+
+        let branch = try runGitCapture(["branch", "--show-current"], in: wtPath).trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(branch, "feature")
+    }
+
     func testWorktreesWithLabelsMergesStoredLabels() async throws {
         let repoURL = try makeTempRepo()
         let wtPath = repoURL.deletingLastPathComponent().appendingPathComponent("wt-\(UUID().uuidString)")
@@ -255,5 +545,20 @@ final class WorktreeServiceTests: XCTestCase {
         }
 
         return output
+    }
+
+    private func linkedWorktree(at path: URL, in entries: [WorktreeEntry]) -> WorktreeEntry? {
+        entries.first { WorktreeLabelStore.key(for: $0.path) == WorktreeLabelStore.key(for: path) }
+    }
+
+    private func createReleaseBranchWithConflictingTrackedChange(in repositoryURL: URL) throws {
+        try runGit(["checkout", "-b", "release"], in: repositoryURL)
+        try "release version\n".write(
+            to: repositoryURL.appendingPathComponent("tracked.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try runGit(["commit", "-am", "change tracked file on release"], in: repositoryURL)
+        try runGit(["checkout", "main"], in: repositoryURL)
     }
 }
