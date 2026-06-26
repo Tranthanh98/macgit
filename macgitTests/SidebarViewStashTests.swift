@@ -17,20 +17,22 @@ final class SidebarViewStashTests: XCTestCase {
 
         let initialState = SidebarSettingsStore.shared.state(for: repositoryPath)
         XCTAssertTrue(initialState.stashesExpanded)
+        XCTAssertFalse(initialState.branchesExpanded)
+        XCTAssertFalse(initialState.worktreesExpanded)
 
         SidebarSettingsStore.shared.toggleSection(.stashes, for: repositoryPath)
 
         let updatedState = SidebarSettingsStore.shared.state(for: repositoryPath)
         XCTAssertFalse(updatedState.stashesExpanded)
-        XCTAssertTrue(updatedState.branchesExpanded)
+        XCTAssertFalse(updatedState.branchesExpanded)
         XCTAssertTrue(updatedState.tagsExpanded)
         XCTAssertTrue(updatedState.remotesExpanded)
     }
 
-    func testSidebarSectionStateDecodesMissingWorktreesExpandedAsTrue() throws {
+    func testSidebarSectionStateDecodesMissingWorktreesExpandedAsFalse() throws {
         let data = #"{"branchesExpanded":true,"tagsExpanded":false}"#.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(SidebarSectionState.self, from: data)
 
-        XCTAssertTrue(decoded.worktreesExpanded)
+        XCTAssertFalse(decoded.worktreesExpanded)
     }
 }

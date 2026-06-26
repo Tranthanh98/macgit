@@ -96,6 +96,7 @@ struct SidebarView: View {
     @State private var headHash: String = ""
     @State private var branchSyncStatus: [String: BranchSyncStatus] = [:]
     @State private var expandedFolders: Set<String> = []
+    @State private var hasLoadedBranches = false
     @State private var isLoadingBranches = false
     @State private var tagNodes: [BranchNode] = []
     @State private var isLoadingTags = false
@@ -106,6 +107,7 @@ struct SidebarView: View {
     @State private var stashEntries: [StashEntry] = []
     @State private var isLoadingStashes = false
     @State private var worktreeEntries: [WorktreeEntry] = []
+    @State private var hasLoadedWorktrees = false
     @State private var isLoadingWorktrees = false
     @State private var worktreeToLabel: WorktreeEntry?
     @State private var worktreeLabelInput = ""
@@ -313,16 +315,15 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .task(id: repositoryURL) {
             loadSectionStates()
-            await loadBranches()
-            await loadWorktrees()
+            resetLazySectionData()
+            await loadVisibleSections(force: false)
             await loadTags()
             await loadRemotes()
             await loadStashes()
         }
         .onReceive(NotificationCenter.default.publisher(for: .repositoryDidChange)) { _ in
             Task {
-                await loadBranches()
-                await loadWorktrees()
+                await loadVisibleSections(force: true)
                 await loadTags()
                 await loadRemotes()
                 await loadStashes()
@@ -429,12 +430,56 @@ struct SidebarView: View {
     }
 
     private func loadSectionStates() {
-        sectionStates = SidebarSettingsStore.shared.state(for: repositoryURL.path)
+        var state = SidebarSettingsStore.shared.state(for: repositoryURL.path)
+        state.branchesExpanded = false
+        state.worktreesExpanded = false
+        sectionStates = state
     }
 
     private func toggleSection(_ section: SidebarSection) {
         SidebarSettingsStore.shared.toggleSection(section, for: repositoryURL.path)
         sectionStates = SidebarSettingsStore.shared.state(for: repositoryURL.path)
+        Task {
+            await loadSectionIfNeeded(section)
+        }
+    }
+
+    private func resetLazySectionData() {
+        branchNodes = []
+        currentBranch = ""
+        headHash = ""
+        branchSyncStatus = [:]
+        expandedFolders = []
+        hasLoadedBranches = false
+        isLoadingBranches = false
+
+        worktreeEntries = []
+        hasLoadedWorktrees = false
+        isLoadingWorktrees = false
+    }
+
+    private func loadVisibleSections(force: Bool) async {
+        if sectionStates.branchesExpanded {
+            await loadBranches(force: force)
+        }
+        if sectionStates.worktreesExpanded {
+            await loadWorktrees(force: force)
+        }
+    }
+
+    private func loadSectionIfNeeded(_ section: SidebarSection) async {
+        switch section {
+        case .branches:
+            if sectionStates.branchesExpanded {
+                await loadBranches(force: false)
+            }
+        case .worktrees:
+            if sectionStates.worktreesExpanded {
+                await loadWorktrees(force: false)
+            }
+        default:
+            break
+        }
     }
 
     private var visibleBranchRows: [BranchRowItem] {
@@ -1315,7 +1360,11 @@ struct SidebarView: View {
         }
     }
 
-    private func loadBranches() async {
+    private func loadBranches(force: Bool = false) async {
+        if !force && hasLoadedBranches {
+            return
+        }
+
         isLoadingBranches = true
         defer { isLoadingBranches = false }
 
@@ -1355,16 +1404,22 @@ struct SidebarView: View {
             branchSyncStatus = syncMap
             expandedFolders = SidebarTreeBuilder.expandedFolderPaths(revealing: current)
                 .intersection(allFolders)
+            hasLoadedBranches = true
         }
     }
 
-    private func loadWorktrees() async {
+    private func loadWorktrees(force: Bool = false) async {
+        if !force && hasLoadedWorktrees {
+            return
+        }
+
         isLoadingWorktrees = true
         defer { isLoadingWorktrees = false }
 
         let entries = await GitStatusService.shared.worktreesWithLabels(in: repositoryURL)
         await MainActor.run {
             worktreeEntries = entries
+            hasLoadedWorktrees = true
         }
     }
 
@@ -1447,7 +1502,7 @@ struct SidebarView: View {
 
         do {
             try await GitStatusService.shared.setWorktreeLabel(worktreeLabelInput, for: entry.path, in: repositoryURL)
-            await loadWorktrees()
+            await loadWorktrees(force: true)
             await MainActor.run {
                 worktreeToLabel = nil
                 worktreeLabelInput = ""
@@ -1463,7 +1518,7 @@ struct SidebarView: View {
     private func clearWorktreeLabel(_ entry: WorktreeEntry) async {
         do {
             try await GitStatusService.shared.removeWorktreeLabel(for: entry.path, in: repositoryURL)
-            await loadWorktrees()
+            await loadWorktrees(force: true)
         } catch {
             await MainActor.run {
                 errorMessage = error.localizedDescription
@@ -1488,7 +1543,7 @@ struct SidebarView: View {
                 reason: worktreeLockReasonInput,
                 in: repositoryURL
             )
-            await loadWorktrees()
+            await loadWorktrees(force: true)
             await MainActor.run {
                 worktreeToLock = nil
                 worktreeLockReasonInput = ""
@@ -1504,7 +1559,7 @@ struct SidebarView: View {
     private func unlockWorktree(_ entry: WorktreeEntry) async {
         do {
             try await GitStatusService.shared.unlockWorktree(at: entry.path, in: repositoryURL)
-            await loadWorktrees()
+            await loadWorktrees(force: true)
         } catch {
             await MainActor.run {
                 errorMessage = error.localizedDescription
@@ -1516,7 +1571,7 @@ struct SidebarView: View {
     private func pruneWorktrees() async {
         do {
             try await GitStatusService.shared.pruneWorktrees(in: repositoryURL)
-            await loadWorktrees()
+            await loadWorktrees(force: true)
         } catch {
             await MainActor.run {
                 errorMessage = error.localizedDescription
@@ -1642,7 +1697,7 @@ struct SidebarView: View {
                 label: worktreeLabelDraft,
                 in: repositoryURL
             )
-            await loadWorktrees()
+            await loadWorktrees(force: true)
             await MainActor.run {
                 showingCreateWorktreeSheet = false
                 worktreeCreationErrorMessage = nil
@@ -1674,7 +1729,7 @@ struct SidebarView: View {
 
         do {
             try await GitStatusService.shared.moveWorktree(from: entry.path, to: destination, in: repositoryURL)
-            await loadWorktrees()
+            await loadWorktrees(force: true)
             await MainActor.run {
                 worktreeToMove = nil
                 worktreeMovePathInput = ""
@@ -1720,7 +1775,7 @@ struct SidebarView: View {
                 force: force,
                 repositoryURL: repositoryURL
             )
-            await loadWorktrees()
+            await loadWorktrees(force: true)
             await MainActor.run {
                 worktreeToCheckout = nil
                 worktreeCheckoutErrorMessage = nil
@@ -1739,7 +1794,7 @@ struct SidebarView: View {
     private func removeWorktree(_ entry: WorktreeEntry, force: Bool) async {
         do {
             try await GitStatusService.shared.removeWorktree(at: entry.path, force: force, in: repositoryURL)
-            await loadWorktrees()
+            await loadWorktrees(force: true)
             await MainActor.run {
                 pendingWorktreeRemoval = nil
                 showingWorktreeRemovalConfirmation = false

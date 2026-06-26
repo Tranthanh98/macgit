@@ -6,18 +6,18 @@
 import Foundation
 
 struct SidebarSectionState: Codable {
-    var branchesExpanded: Bool = true
+    var branchesExpanded: Bool = false
     var tagsExpanded: Bool = true
     var remotesExpanded: Bool = true
     var stashesExpanded: Bool = true
-    var worktreesExpanded: Bool = true
+    var worktreesExpanded: Bool = false
 
     init(
-        branchesExpanded: Bool = true,
+        branchesExpanded: Bool = false,
         tagsExpanded: Bool = true,
         remotesExpanded: Bool = true,
         stashesExpanded: Bool = true,
-        worktreesExpanded: Bool = true
+        worktreesExpanded: Bool = false
     ) {
         self.branchesExpanded = branchesExpanded
         self.tagsExpanded = tagsExpanded
@@ -28,11 +28,11 @@ struct SidebarSectionState: Codable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        branchesExpanded = try container.decodeIfPresent(Bool.self, forKey: .branchesExpanded) ?? true
+        branchesExpanded = try container.decodeIfPresent(Bool.self, forKey: .branchesExpanded) ?? false
         tagsExpanded = try container.decodeIfPresent(Bool.self, forKey: .tagsExpanded) ?? true
         remotesExpanded = try container.decodeIfPresent(Bool.self, forKey: .remotesExpanded) ?? true
         stashesExpanded = try container.decodeIfPresent(Bool.self, forKey: .stashesExpanded) ?? true
-        worktreesExpanded = try container.decodeIfPresent(Bool.self, forKey: .worktreesExpanded) ?? true
+        worktreesExpanded = try container.decodeIfPresent(Bool.self, forKey: .worktreesExpanded) ?? false
     }
 }
 
