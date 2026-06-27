@@ -1,183 +1,141 @@
-# Commit+ (macgit)
+<p align="center">
+  <img src=".github/assets/logo.png" width="128" height="128" alt="Commit+">
+</p>
 
-**Commit+** là một Git client macOS native, được xây dựng bằng Swift và SwiftUI. Ứng dụng cung cấp giao diện trực quan cho các thao tác Git thường dùng, nhắm đến người dùng macOS muốn một trải nghiệm native, nhẹ nhàng thay thế cho command line hoặc các Git client dựa trên Electron.
+<p align="center">
+  <h1 align="center">Commit+</h1>
+</p>
 
-![Tech Stack](https://img.shields.io/badge/Swift-5.0-orange)
-![Platform](https://img.shields.io/badge/macOS-26.2%2B-blue)
-![Dependencies](https://img.shields.io/badge/dependencies-0-green)
+<p align="center">
+  A fast, native Git client for macOS.<br>
+  Free and open source.
+</p>
+
+<p align="center">
+  <a href="https://github.com/TableProApp/TablePro/releases/latest"><img src="https://img.shields.io/badge/Swift-5.0-orange" alt="Swift"></a>
+  <a href="https://img.shields.io/badge/macOS-26.2%2B-blue"><img src="https://img.shields.io/badge/macOS-26.2%2B-blue" alt="macOS"></a>
+  <a href="https://img.shields.io/badge/dependencies-0-green"><img src="https://img.shields.io/badge/dependencies-0-green" alt="Dependencies"></a>
+  <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
+</p>
 
 ---
 
-## Tính năng chính
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/Screenshot.png">
+    <source media="(prefers-color-scheme: light)" srcset=".github/assets/Screenshot.png">
+    <img alt="Commit+ Git client for macOS" src=".github/assets/Screenshot.png" width="800">
+  </picture>
+</p>
 
-- **Repository Management**: Mở, clone, và quản lý nhiều repository trong các cửa sổ riêng biệt
-- **File Status & Staging**: Giao diện split-pane với danh sách file và diff viewer, stage/unstage file, discard changes, xử lý conflict
-- **Commit Interface**: Commit bar mở rộng, hỗ trợ amend, bypass hooks, sign-off, push ngay sau commit
-- **History & Commit Graph**: Trực quan hóa commit graph với branch lanes, pagination (120 commits/lần), infinite scroll
-- **Sidebar Navigation**: Cây branches, tags, remotes, stashes với sync badges (ahead/behind)
-- **Git Operations**: Commit, Pull, Push, Fetch, Branch, Merge, Stash - tất cả đều có phím tắt
-- **Quick Search**: Spotlight-style search modal để tìm commits, files, branches, tags
-- **External Integration**: Mở trong Finder, Terminal, hoặc trực tiếp remote URL (GitHub/GitLab/Bitbucket)
+Commit+ is a native macOS Git client built with Swift and SwiftUI. Zero external dependencies. Git is driven via `Process()` subprocess.
 
----
+## Why Commit+
 
-## Yêu cầu hệ thống
+macOS Git clients today fall into three groups:
+
+- **Command line**: Powerful but requires memorizing dozens of commands and flags.
+- **Electron-based**: Source Tree, GitKraken, Fork. Cross-platform but not native—slow to start, heavy on memory, inconsistent with macOS conventions.
+- **Proprietary**: Tower. Polished and native, but paid and closed source.
+
+Commit+ is the missing fourth: native, lightweight, and open source.
+
+## Features
+
+### Drag & Drop
+
+Complex Git actions become effortless with drag and drop:
+
+- **Reorder / Squash Commits**: Drag commits in the history view to reorder, squash, or fixup (interactive rebase)
+- **Cherry-Pick / Revert**: Drag commits between branches to cherry-pick; hold ⌥ to revert
+- **Merge / Rebase Branches**: Drag a branch onto HEAD to merge; hold ⌥ to rebase instead
+- **Push / Pull Branches**: Drag branches to the remote section to publish or pull
+- **Stage / Stash Files**: Drag files between working copy, staged, and stash views
+- **Apply Stashes**: Drag a stash or individual file back to the working copy to apply
+
+### Undo Any Action
+
+Tower-style undo/redo for stage/unstage, commits, stashes, branch operations, discards, and remote actions. Press `Cmd+Z` to undo, `Cmd+Shift+Z` to redo.
+
+### Full Git Management
+
+Commit, Pull, Push, Fetch, Branch, Merge, Rebase, Stash, Cherry-pick, Revert, Reset — all with keyboard shortcuts.
+
+### Built-in Conflict Resolution
+
+Visual diff viewer with inline conflict markers, stage resolution, and abort merge/rebase — resolve conflicts without leaving the app.
+
+### Smarter Worktree Management
+
+Create, switch, and remove git worktrees from the sidebar for isolated parallel feature work, all managed visually.
+
+### AI Features *(coming soon)*
+
+- **AI Commit Generation**: Auto-generate commit messages from your staged diff
+- **AI Conflict Resolution**: Smart suggestions for resolving merge conflicts
+
+### Quick Search
+
+Spotlight-style search modal (`Cmd+Shift+F`) to instantly find commits, files, branches, and tags.
+
+## System Requirements
 
 - **macOS**: 26.2+
-- **Xcode**: 26.2+ (nếu build từ source)
-- **Git**: Cài đặt trên hệ thống (Homebrew hoặc Xcode Command Line Tools)
+- **Xcode**: 26.2+ (to build from source)
+- **Git**: Installed on the system (Homebrew or Xcode Command Line Tools)
 
----
-
-## Cách chạy từ Command Line (không cần mở Xcode)
-
-### 1. Build và chạy bằng `xcodebuild`
+## Build & Run
 
 ```bash
-# Build app từ command line
+# Build
 xcodebuild -project macgit.xcodeproj -scheme macgit -destination 'platform=macOS' build
 
-# Chạy app vừa build (lấy build mới nhất để tránh mở nhiều instance)
+# Run
 open $(ls -dt ~/Library/Developer/Xcode/DerivedData/macgit-*/Build/Products/Debug/Commit+.app | head -n 1)
-```
 
-### 2. Chạy app đã build trước đó
-
-Nếu bạn đã từng build trong Xcode, app thường nằm ở:
-
-```bash
-# Tìm app đã build
-find ~/Library/Developer/Xcode/DerivedData -name "Commit+.app" -type d
-
-# Chạy trực tiếp (thay xxxxxxxx bằng đúng hash của bạn)
-open ~/Library/Developer/Xcode/DerivedData/macgit-xxxxxxxx/Build/Products/Debug/Commit+.app
-```
-
-### 3. Tạo alias tiện lợi
-
-Thêm vào `~/.zshrc` hoặc `~/.bashrc`:
-
-```bash
-# Build và chạy Commit+ nhanh
-alias runcommitplus='xcodebuild -project ~/Project/macgit/macgit.xcodeproj -scheme macgit build && open $(ls -dt ~/Library/Developer/Xcode/DerivedData/macgit-*/Build/Products/Debug/Commit+.app | head -n 1)'
-
-# Chỉ chạy app đã build (mới nhất)
-alias opencommitplus='open $(ls -dt ~/Library/Developer/Xcode/DerivedData/macgit-*/Build/Products/Debug/Commit+.app | head -n 1)'
-```
-
-### 4. Tạo script build
-
-Tạo file `build.sh` trong thư mục project:
-
-```bash
-#!/bin/bash
-set -e
-
-echo "🔨 Building Commit+..."
-xcodebuild -project macgit.xcodeproj -scheme macgit -destination 'platform=macOS' build
-
-echo "🚀 Launching Commit+..."
-# Lấy build mới nhất để tránh mở nhiều instance từ các build cũ
-APP_PATH=$(ls -dt ~/Library/Developer/Xcode/DerivedData/macgit-*/Build/Products/Debug/Commit+.app | head -n 1)
-if [ -n "$APP_PATH" ]; then
-    open "$APP_PATH"
-    echo "✅ Done! App launched from: $APP_PATH"
-else
-    echo "❌ Error: Could not find built app"
-    exit 1
-fi
-```
-
-Sau đó:
-```bash
-chmod +x build.sh
-./build.sh
-```
-
-### 5. Build Release version
-
-```bash
+# Release build
 xcodebuild -project macgit.xcodeproj -scheme macgit -configuration Release -destination 'platform=macOS' build
-
-# App release sẽ nằm ở (lấy build mới nhất)
-open $(ls -dt ~/Library/Developer/Xcode/DerivedData/macgit-*/Build/Products/Release/Commit+.app | head -n 1)
 ```
 
----
-
-## Cách chạy từ Xcode
+Or open in Xcode and press `Cmd+R`:
 
 ```bash
-# Mở project trong Xcode
 open macgit.xcodeproj
-
-# Sau đó nhấn Cmd+R để build và chạy
 ```
 
----
+## Testing
 
-## Kiến trúc dự án
+```bash
+xcodebuild -project macgit.xcodeproj -scheme macgit -destination 'platform=macOS' test
+```
+
+## Tech Stack
+
+| Technology | Detail |
+|-----------|--------|
+| **Language** | Swift 5.0 |
+| **UI Framework** | SwiftUI |
+| **Platform** | macOS 26.2+ |
+| **Concurrency** | Swift async/await, actor |
+| **Git Engine** | System Git via `Process()` subprocess |
+| **Dependencies** | **None** — 0 external dependencies |
+
+## Project Structure
 
 ```
 macgit/
 ├── App/                 # App entry point & global state
-│   ├── macgitApp.swift
-│   ├── AppState.swift
-│   └── ToolbarAction.swift
 ├── Views/               # SwiftUI views
-│   ├── MainWindow/
-│   ├── FileStatus/
-│   ├── History/
-│   ├── Search/
-│   ├── Stashes/
-│   └── Common/
 ├── Services/            # Git operations & business logic
-│   ├── GitStatusService.swift
-│   ├── GitStatus.swift
-│   └── ...
 ├── Models/              # Data models
 ├── ViewModels/          # View models
 └── Resources/           # Assets
 ```
 
----
+## Keyboard Shortcuts
 
-## Tech Stack
-
-| Công nghệ | Chi tiết |
-|-----------|----------|
-| **Ngôn ngữ** | Swift 5.0 |
-| **UI Framework** | SwiftUI |
-| **Nền tảng** | macOS 26.2+ |
-| **Concurrency** | Swift async/await, actor |
-| **Git Engine** | System Git via `Process()` subprocess |
-| **Dependencies** | **Không có** — 0 external dependencies |
-| **Persistence** | UserDefaults |
-
----
-
-## Testing
-
-```bash
-# Chạy tất cả tests từ command line
-xcodebuild -project macgit.xcodeproj -scheme macgit -destination 'platform=macOS' test
-```
-
-Test suite bao gồm:
-- SidebarTreeBuilderTests
-- HistoryPaginationTests
-- BranchSyncStatusTests
-- StashServiceTests
-- SearchViewTests
-- CommitGraphLayoutEngineTests
-- Và nhiều test khác...
-
----
-
-## Phím tắt
-
-| Phím tắt | Chức năng |
-|----------|-----------|
+| Shortcut | Action |
+|----------|--------|
 | `Cmd+Shift+C` | Commit |
 | `Cmd+Shift+P` | Pull |
 | `Cmd+Option+P` | Push |
@@ -187,47 +145,10 @@ Test suite bao gồm:
 | `Cmd+Shift+S` | Stash |
 | `Cmd+Shift+F` | Search |
 
----
-
-## Ghi chú
-
-- **Bundle ID**: `com.thanhtran.macgit`
-- **Product Name**: `Commit+.app`
-- **App Sandbox**: Đã tắt (bắt buộc để thực thi lệnh git và mở Terminal)
-- **Hardened Runtime**: Đã bật
-
----
-
-## Troubleshooting
-
-### Mở app bằng `open` chạy nhiều instance (3+ cửa sổ)
-
-**Nguyên nhân**: Wildcard `macgit-*` trong command có thể match nhiều thư mục DerivedData cũ (Xcode tạo thư mục mới mỗi lần clean build). Shell expand thành nhiều path, `open` mở cả nhiều app bundle.
-
-**Kiểm tra**:
-```bash
-# Xem có bao nhiêu thư mục DerivedData
-ls ~/Library/Developer/Xcode/DerivedData/ | grep macgit
-
-# Xem shell expand thành bao nhiêu path
-echo ~/Library/Developer/Xcode/DerivedData/macgit-*/Build/Products/Debug/Commit+.app
-```
-
-**Fix**: Dùng `ls -dt` để lấy build mới nhất thay vì wildcard:
-```bash
-# Lấy app mới nhất
-open $(ls -dt ~/Library/Developer/Xcode/DerivedData/macgit-*/Build/Products/Debug/Commit+.app | head -n 1)
-
-# Hoặc dọn dẹp DerivedData cũ
-rm -rf ~/Library/Developer/Xcode/DerivedData/macgit-*
-```
-
----
-
 ## License
 
-[Chưa xác định]
+This project is licensed under the [GNU Affero General Public License v3.0 (AGPLv3)](LICENSE).
 
 ---
 
-*Được phát triển với ❤️ cho cộng đồng macOS developer.*
+*Built for the macOS developer community.*
