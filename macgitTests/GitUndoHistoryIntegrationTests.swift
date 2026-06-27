@@ -15,6 +15,43 @@ final class GitUndoHistoryIntegrationTests: XCTestCase {
         XCTAssertEqual(try runGitOutput(["rev-parse", "HEAD"], in: repoURL), oldHead)
     }
 
+    func testBatchCherryPickRedoReappliesAllCommits() async throws {
+        let repoURL = try makeRepoWithTwoFeatureCommits()
+        let oldHead = try runGitOutput(["rev-parse", "HEAD"], in: repoURL)
+        let firstFeatureHead = try runGitOutput(["rev-parse", "feature~1"], in: repoURL)
+        let secondFeatureHead = try runGitOutput(["rev-parse", "feature"], in: repoURL)
+        let executor = GitUndoExecutor()
+
+        try await executor.execute(
+            .cherryPickCommits(commits: [firstFeatureHead, secondFeatureHead]),
+            in: repoURL
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature-one.txt").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature-two.txt").path))
+        XCTAssertEqual(
+            try runGitOutput(["log", "--format=%s", "-2"], in: repoURL)
+                .components(separatedBy: "\n"),
+            ["feature two", "feature one"]
+        )
+
+        let newHead = try runGitOutput(["rev-parse", "HEAD"], in: repoURL)
+        try await executor.execute(.resetHead(target: oldHead, mode: .hard, expectedHead: newHead), in: repoURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature-one.txt").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature-two.txt").path))
+
+        try await executor.execute(
+            .cherryPickCommits(commits: [firstFeatureHead, secondFeatureHead]),
+            in: repoURL
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature-one.txt").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature-two.txt").path))
+        XCTAssertEqual(
+            try runGitOutput(["log", "--format=%s", "-2"], in: repoURL)
+                .components(separatedBy: "\n"),
+            ["feature two", "feature one"]
+        )
+    }
+
     func testRevertUndoResetsToOldHead() async throws {
         let repoURL = try makeTempRepo()
         try "changed\n".write(to: repoURL.appendingPathComponent("tracked.txt"), atomically: true, encoding: .utf8)
@@ -81,6 +118,30 @@ final class GitUndoHistoryIntegrationTests: XCTestCase {
         try "feature\n".write(to: repoURL.appendingPathComponent("feature.txt"), atomically: true, encoding: .utf8)
         try runGit(["add", "feature.txt"], in: repoURL)
         try runGit(["commit", "-m", "feature"], in: repoURL)
+        try runGit(["checkout", "main"], in: repoURL)
+        return repoURL
+    }
+
+    private func makeRepoWithTwoFeatureCommits() throws -> URL {
+        let repoURL = try makeTempRepo()
+        try runGit(["checkout", "-b", "feature"], in: repoURL)
+
+        try "feature one\n".write(
+            to: repoURL.appendingPathComponent("feature-one.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try runGit(["add", "feature-one.txt"], in: repoURL)
+        try runGit(["commit", "-m", "feature one"], in: repoURL)
+
+        try "feature two\n".write(
+            to: repoURL.appendingPathComponent("feature-two.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try runGit(["add", "feature-two.txt"], in: repoURL)
+        try runGit(["commit", "-m", "feature two"], in: repoURL)
+
         try runGit(["checkout", "main"], in: repoURL)
         return repoURL
     }

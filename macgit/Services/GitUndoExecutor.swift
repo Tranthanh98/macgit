@@ -67,7 +67,9 @@ struct GitUndoExecutor {
             if signOff { arguments.append("--signoff") }
             _ = try await runner.runGit(arguments: arguments, in: repositoryURL)
         case .cherryPick(let commit):
-            _ = try await runner.runGit(arguments: ["cherry-pick", commit], in: repositoryURL)
+            try await runCherryPick(commits: [commit], in: repositoryURL)
+        case .cherryPickCommits(let commits):
+            try await runCherryPick(commits: commits, in: repositoryURL)
         case .revert(let commit):
             _ = try await runner.runGit(arguments: ["revert", "--no-edit", commit], in: repositoryURL)
         case .mergeCommit(let commit, let noCommit, let log):
@@ -150,7 +152,7 @@ struct GitUndoExecutor {
             }
         case .removeFiles(let paths):
             for path in paths {
-                _ = try await runner.runGit(arguments: ["rm", "-f", path], in: repositoryURL)
+                _ = try await runner.runGit(arguments: ["rm", "-f", "--", path], in: repositoryURL)
             }
         }
     }
@@ -162,5 +164,12 @@ struct GitUndoExecutor {
         var arguments = prefix
         arguments.append(contentsOf: paths)
         _ = try await runner.runGit(arguments: arguments, in: repositoryURL)
+    }
+
+    private func runCherryPick(commits: [String], in repositoryURL: URL) async throws {
+        guard !commits.isEmpty else {
+            throw GitError.commandFailed("Select at least one commit to cherry-pick.")
+        }
+        _ = try await runner.runGit(arguments: ["cherry-pick"] + commits, in: repositoryURL)
     }
 }

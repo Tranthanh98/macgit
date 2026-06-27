@@ -65,10 +65,15 @@ extension GitStatusService {
         for line in output.split(separator: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard !trimmed.isEmpty else { continue }
-            let parts = trimmed.split(separator: "\t", maxSplits: 1)
+            let parts = trimmed.split(separator: "\t")
             guard parts.count >= 2 else { continue }
             let statusCode = String(parts[0]).trimmingCharacters(in: .whitespaces)
-            let path = String(parts[1]).trimmingCharacters(in: .whitespaces)
+            let path: String
+            if (statusCode.hasPrefix("R") || statusCode.hasPrefix("C")) && parts.count >= 3 {
+                path = String(parts[2])
+            } else {
+                path = String(parts[1])
+            }
 
             let status: CommitFileStatus
             switch statusCode.prefix(1) {
@@ -92,7 +97,14 @@ extension GitStatusService {
     }
 
     func cherryPickCommit(_ commit: String, in repositoryURL: URL) async throws {
-        _ = try await runGit(arguments: ["cherry-pick", commit], in: repositoryURL)
+        try await cherryPickCommits([commit], in: repositoryURL)
+    }
+
+    func cherryPickCommits(_ commits: [String], in repositoryURL: URL) async throws {
+        guard !commits.isEmpty else {
+            throw GitError.commandFailed("Select at least one commit to cherry-pick.")
+        }
+        _ = try await runGit(arguments: ["cherry-pick"] + commits, in: repositoryURL)
     }
 
     func mergeCommit(_ commit: String, noCommit: Bool = false, log: Bool = false, in repositoryURL: URL) async throws {

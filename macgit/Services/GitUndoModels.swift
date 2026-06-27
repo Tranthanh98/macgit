@@ -28,6 +28,7 @@ indirect enum GitUndoOperation: Equatable {
     case resetHead(target: String, mode: GitUndoResetMode, expectedHead: String?)
     case commit(message: String, noVerify: Bool, signOff: Bool)
     case cherryPick(commit: String)
+    case cherryPickCommits(commits: [String])
     case revert(commit: String)
     case mergeCommit(commit: String, noCommit: Bool, log: Bool)
     case rebaseOnto(commit: String)

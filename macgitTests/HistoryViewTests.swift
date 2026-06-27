@@ -85,4 +85,88 @@ final class HistoryViewTests: XCTestCase {
             )
         )
     }
+
+    func testDraggedCommitsUseSelectionForSelectedRowInOldestFirstOrder() {
+        let commits = [
+            makeCommit(hash: "newest", message: "Newest"),
+            makeCommit(hash: "middle", message: "Middle"),
+            makeCommit(hash: "oldest", message: "Oldest", parents: ["p1", "p2"])
+        ]
+        let selection = HistoryCommitSelection(
+            selectedHashes: ["newest", "oldest"],
+            primaryHash: "newest",
+            anchorHash: "oldest"
+        )
+
+        XCTAssertEqual(
+            HistoryView.draggedCommits(
+                startingAt: "newest",
+                commits: commits,
+                selection: selection
+            ),
+            [
+                GitDraggedCommit(hash: "oldest", message: "Oldest", isMerge: true),
+                GitDraggedCommit(hash: "newest", message: "Newest", isMerge: false)
+            ]
+        )
+    }
+
+    func testDraggedCommitsFallBackToDraggedRowWhenRowIsNotSelected() {
+        let commits = [
+            makeCommit(hash: "newest", message: "Newest"),
+            makeCommit(hash: "middle", message: "Middle"),
+            makeCommit(hash: "oldest", message: "Oldest")
+        ]
+        let selection = HistoryCommitSelection(
+            selectedHashes: ["newest"],
+            primaryHash: "newest",
+            anchorHash: "newest"
+        )
+
+        XCTAssertEqual(
+            HistoryView.draggedCommits(
+                startingAt: "middle",
+                commits: commits,
+                selection: selection
+            ),
+            [GitDraggedCommit(hash: "middle", message: "Middle", isMerge: false)]
+        )
+    }
+
+    func testDragPreviewTitleUsesPluralCountForMultiSelection() {
+        let commits = [
+            makeCommit(hash: "newest", message: "Newest"),
+            makeCommit(hash: "oldest", message: "Oldest")
+        ]
+        let selection = HistoryCommitSelection(
+            selectedHashes: ["newest", "oldest"],
+            primaryHash: "newest",
+            anchorHash: "oldest"
+        )
+
+        XCTAssertEqual(
+            HistoryView.dragPreviewTitle(
+                startingAt: "newest",
+                commits: commits,
+                selection: selection
+            ),
+            "2 commits"
+        )
+    }
+
+    private func makeCommit(
+        hash: String,
+        message: String,
+        parents: [String] = []
+    ) -> Commit {
+        Commit(
+            hash: hash,
+            parents: parents,
+            message: message,
+            author: "Test",
+            email: "test@example.com",
+            date: Date(timeIntervalSince1970: 0),
+            refs: []
+        )
+    }
 }

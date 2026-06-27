@@ -15,6 +15,7 @@ struct HistoryView: View {
     
     @State private var commits: [Commit] = []
     @State private var graphModel: CommitGraphModel? = nil
+    @State private var commitSelection = HistoryCommitSelection()
     @State private var selectedCommit: Commit? = nil
     @State private var fileChanges: [CommitFileChange] = []
     @State private var selectedFile: CommitFileChange? = nil
@@ -488,6 +489,7 @@ struct HistoryView: View {
     private var commitGraphList: some View {
         GeometryReader { geometry in
             let viewportWidth = geometry.size.width
+            let visibleHashes = commits.map(\.hash)
             let resizers: CGFloat = 4 * 6
             let padding: CGFloat = 8 + 16
             let fixedWidth = graphWidth + CGFloat(messageColumnWidth) + CGFloat(authorColumnWidth) + CGFloat(dateColumnWidth) + CGFloat(commitColumnWidth) + resizers + padding
@@ -514,13 +516,34 @@ struct HistoryView: View {
                                             CommitRowView(
                                                 commit: commit,
                                                 graphWidth: graphWidth,
-                                                isSelected: selectedCommit?.hash == commit.hash,
+                                                isSelected: commitSelection.selectedHashes.contains(commit.hash),
                                                 messageWidth: effectiveMessageWidth,
                                                 authorWidth: CGFloat(authorColumnWidth),
                                                 dateWidth: CGFloat(dateColumnWidth),
                                                 commitWidth: CGFloat(commitColumnWidth)
                                             )
                                             .id(commit.hash)
+                                            .draggable(
+                                                GitDragPayload.commits(
+                                                    Self.draggedCommits(
+                                                        startingAt: commit.hash,
+                                                        commits: commits,
+                                                        selection: commitSelection
+                                                    ),
+                                                    repositoryURL: repositoryURL
+                                                )
+                                            ) {
+                                                Text(
+                                                    Self.dragPreviewTitle(
+                                                        startingAt: commit.hash,
+                                                        commits: commits,
+                                                        selection: commitSelection
+                                                    )
+                                                )
+                                                .font(.system(size: 12, weight: .medium))
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 8)
+                                            }
                                             .background(
                                                 GeometryReader { geo in
                                                     Color.clear.preference(
@@ -530,9 +553,22 @@ struct HistoryView: View {
                                                 }
                                             )
                                             .contentShape(Rectangle())
-                                            .onClick(left: {
-                                                selectedCommit = commit
+                                            .onClick(left: { modifiers in
+                                                commitSelection.select(
+                                                    commit.hash,
+                                                    modifiers: Self.selectionModifiers(from: modifiers),
+                                                    visibleHashes: visibleHashes
+                                                )
+                                                selectedCommit = Self.commit(
+                                                    withHash: commitSelection.primaryHash,
+                                                    in: commits
+                                                )
                                             }, right: {
+                                                commitSelection.select(
+                                                    commit.hash,
+                                                    modifiers: [],
+                                                    visibleHashes: visibleHashes
+                                                )
                                                 selectedCommit = commit
                                             })
                                             .contextMenu {
@@ -873,11 +909,18 @@ struct HistoryView: View {
         await MainActor.run {
             commits = loadedCommits
             graphModel = newGraphModel
-            if let newSelectedCommit {
-                selectedCommit = newSelectedCommit
-                if skip == 0 {
-                    scrollTarget = newScrollTarget
-                }
+            let visibleHashes = loadedCommits.map(\.hash)
+            commitSelection.prune(visibleHashes: visibleHashes)
+            if commitSelection.selectedHashes.isEmpty, let newSelectedCommit {
+                commitSelection.select(
+                    newSelectedCommit.hash,
+                    modifiers: [],
+                    visibleHashes: visibleHashes
+                )
+            }
+            selectedCommit = Self.commit(withHash: commitSelection.primaryHash, in: loadedCommits)
+            if skip == 0 {
+                scrollTarget = selectedCommit?.hash ?? newScrollTarget
             }
             paging.finishLoadingMore(loaded: newCommits.count)
             cancelHistoryRefreshIndicator()
@@ -1252,6 +1295,17 @@ struct HistoryView: View {
         showAllBranches ? .all : .currentBranchOnly
     }
 
+    static func selectionModifiers(from flags: NSEvent.ModifierFlags) -> HistoryCommitSelection.Modifiers {
+        var modifiers: HistoryCommitSelection.Modifiers = []
+        if flags.contains(.command) {
+            modifiers.insert(.command)
+        }
+        if flags.contains(.shift) {
+            modifiers.insert(.shift)
+        }
+        return modifiers
+    }
+
     static func resolvedHeadHash(from commits: [Commit]) -> String? {
         commits.first(where: { commit in
             commit.refs.contains {
@@ -1271,6 +1325,45 @@ struct HistoryView: View {
 
     static func isRowVisible(_ frame: CGRect, viewportHeight: CGFloat) -> Bool {
         frame.maxY > 0 && frame.minY < viewportHeight
+    }
+
+    static func commit(withHash hash: String?, in commits: [Commit]) -> Commit? {
+        guard let hash else { return nil }
+        return commits.first { $0.hash == hash }
+    }
+
+    static func draggedCommits(
+        startingAt hash: String,
+        commits: [Commit],
+        selection: HistoryCommitSelection
+    ) -> [GitDraggedCommit] {
+        let commitsByHash = Dictionary(uniqueKeysWithValues: commits.map { ($0.hash, $0) })
+        return selection
+            .draggedHashes(startingAt: hash, visibleHashes: commits.map(\.hash))
+            .compactMap { selectedHash in
+                guard let commit = commitsByHash[selectedHash] else { return nil }
+                return GitDraggedCommit(
+                    hash: commit.hash,
+                    message: commit.message,
+                    isMerge: commit.isMerge
+                )
+            }
+    }
+
+    static func dragPreviewTitle(
+        startingAt hash: String,
+        commits: [Commit],
+        selection: HistoryCommitSelection
+    ) -> String {
+        let draggedCommits = draggedCommits(
+            startingAt: hash,
+            commits: commits,
+            selection: selection
+        )
+        if draggedCommits.count == 1 {
+            return draggedCommits[0].message
+        }
+        return "\(draggedCommits.count) commits"
     }
 
     @MainActor

@@ -198,6 +198,19 @@ final class GitUndoExecutorTests: XCTestCase {
         ])
     }
 
+    func testCherryPickCommitsRunsOneOrderedCherryPickCommand() async throws {
+        let runner = RecordingGitRunner()
+        let executor = GitUndoExecutor(runner: runner)
+        let repoURL = URL(fileURLWithPath: "/tmp/repo")
+
+        try await executor.execute(.cherryPickCommits(commits: ["old", "new"]), in: repoURL)
+
+        let calls = await runner.recordedCalls()
+        XCTAssertEqual(calls, [
+            GitCommandCall(arguments: ["cherry-pick", "old", "new"], directory: repoURL)
+        ])
+    }
+
     func testMergeCommitRunsGitMergeWithSelectedFlags() async throws {
         let runner = RecordingGitRunner()
         let executor = GitUndoExecutor(runner: runner)

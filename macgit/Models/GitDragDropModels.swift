@@ -1,0 +1,137 @@
+import CoreTransferable
+import Foundation
+import UniformTypeIdentifiers
+
+extension UTType {
+    nonisolated static let macgitGitDragPayload = UTType(exportedAs: "com.thanhtran.macgit.git-drag-payload")
+}
+
+nonisolated struct GitDraggedCommit: Codable, Hashable, Sendable {
+    let hash: String
+    let message: String
+    let isMerge: Bool
+}
+
+nonisolated struct GitDragPayload: Codable, Hashable, Sendable, Transferable {
+    enum Content: Codable, Hashable, Sendable {
+        case commits([GitDraggedCommit])
+        case branch(String)
+        case files([String])
+        case stash(String)
+    }
+
+    let repositoryPath: String
+    let content: Content
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .macgitGitDragPayload)
+    }
+
+    static func normalizedPath(_ url: URL) -> String {
+        url.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    static func commits(_ commits: [GitDraggedCommit], repositoryURL: URL) -> GitDragPayload {
+        GitDragPayload(
+            repositoryPath: normalizedPath(repositoryURL),
+            content: .commits(commits)
+        )
+    }
+
+    static func branch(_ branch: String, repositoryURL: URL) -> GitDragPayload {
+        GitDragPayload(
+            repositoryPath: normalizedPath(repositoryURL),
+            content: .branch(branch)
+        )
+    }
+
+    static func files(_ paths: [String], repositoryURL: URL) -> GitDragPayload {
+        GitDragPayload(
+            repositoryPath: normalizedPath(repositoryURL),
+            content: .files(paths)
+        )
+    }
+
+    static func stash(_ ref: String, repositoryURL: URL) -> GitDragPayload {
+        GitDragPayload(
+            repositoryPath: normalizedPath(repositoryURL),
+            content: .stash(ref)
+        )
+    }
+
+    nonisolated var commits: [GitDraggedCommit] {
+        content.commitsValue ?? []
+    }
+
+    nonisolated var branch: String? {
+        content.branchValue
+    }
+
+    nonisolated var files: [String] {
+        content.filesValue ?? []
+    }
+
+    nonisolated var stash: String? {
+        content.stashValue
+    }
+}
+
+extension GitDragPayload.Content {
+    nonisolated var commitsValue: [GitDraggedCommit]? {
+        guard case .commits(let commits) = self else {
+            return nil
+        }
+        return commits
+    }
+
+    nonisolated var branchValue: String? {
+        guard case .branch(let branch) = self else {
+            return nil
+        }
+        return branch
+    }
+
+    nonisolated var filesValue: [String]? {
+        guard case .files(let files) = self else {
+            return nil
+        }
+        return files
+    }
+
+    nonisolated var stashValue: String? {
+        guard case .stash(let stash) = self else {
+            return nil
+        }
+        return stash
+    }
+}
+
+nonisolated enum GitDragTarget: Equatable, Sendable {
+    case localBranch(name: String, isCurrent: Bool)
+    case branchesHeader
+    case stashesHeader
+    case fileStatus
+}
+
+nonisolated enum GitBranchStartPoint: Equatable, Sendable {
+    case commit(hash: String, message: String)
+    case branch(String)
+}
+
+nonisolated enum GitDragBranchOperation: Equatable, Sendable {
+    case merge
+    case rebase
+}
+
+nonisolated enum GitDragDropRequest: Equatable, Sendable {
+    case cherryPick(commits: [GitDraggedCommit], targetBranch: String)
+    case createBranch(startPoint: GitBranchStartPoint)
+    case branchOperation(source: String, target: String, operation: GitDragBranchOperation)
+    case stashFiles(paths: [String])
+    case applyStash(ref: String)
+}
+
+nonisolated enum GitDragDropDecision: Equatable, Sendable {
+    case accept(GitDragDropRequest)
+    case reject(String)
+}
