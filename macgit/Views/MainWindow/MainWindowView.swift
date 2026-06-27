@@ -266,7 +266,7 @@ struct MainWindowView: View {
                 showingSearchModal = true
             }
         )
-        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 300)
+        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 600)
     }
 
     private var currentBranchFallbackSyncStatus: BranchSyncStatus? {

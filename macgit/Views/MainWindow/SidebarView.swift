@@ -453,6 +453,7 @@ struct SidebarView: View {
         var state = SidebarSettingsStore.shared.state(for: repositoryURL.path)
         state.branchesExpanded = false
         state.worktreesExpanded = false
+        SidebarSettingsStore.shared.update(for: repositoryURL.path, state: state)
         sectionStates = state
     }
 
