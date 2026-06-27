@@ -330,14 +330,15 @@ struct SidebarView: View {
                     sectionHeader(.stashes, isExpanded: sectionStates.stashesExpanded)
                 }
 
-                ForEach([SidebarSection.submodules, .subtrees], id: \.self) { section in
-                    Section(section.rawValue) {
-                        Text("Coming soon")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .disabled(true)
-                }
+                // TODO: Re-enable when submodule/subtree support is implemented
+                // ForEach([SidebarSection.submodules, .subtrees], id: \.self) { section in
+                //     Section(section.rawValue) {
+                //         Text("Coming soon")
+                //             .font(.caption)
+                //             .foregroundStyle(.secondary)
+                //     }
+                //     .disabled(true)
+                // }
             }
             .listStyle(.sidebar)
             .task(id: repositoryURL) {
