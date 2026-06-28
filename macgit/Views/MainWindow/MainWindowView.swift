@@ -450,7 +450,7 @@ struct MainWindowView: View {
     ) -> some View {
         GitDragActionConfirmationSheet(
             title: "Cherry-pick Commits",
-            message: "macgit will check out the target branch if needed, then cherry-pick the selected commits.",
+            message: "For another branch, macgit uses a worktree so the current working copy stays unchanged.",
             targetBranchName: confirmation.targetBranch,
             commits: confirmation.commits,
             primaryActionTitle: "Cherry-pick",
@@ -692,22 +692,24 @@ struct MainWindowView: View {
         }
 
         let hashes = confirmation.commits.map(\.hash)
+        let currentBranch = await GitStatusService.shared.currentBranch(in: repositoryURL)
 
         do {
-            let oldHead = await GitStatusService.shared.tipHash(
-                for: confirmation.targetBranch,
-                in: repositoryURL
-            )
-            try await GitStatusService.shared.cherryPickCommits(
+            let oldHead = currentBranch == confirmation.targetBranch
+                ? await GitStatusService.shared.tipHash(for: "HEAD", in: repositoryURL)
+                : nil
+            let executionLocation = try await GitStatusService.shared.cherryPickCommits(
                 hashes,
                 onto: confirmation.targetBranch,
                 in: repositoryURL
             )
-            await registerHeadChangingUndo(
-                label: hashes.count == 1 ? "Cherry-pick \(confirmation.commits[0].hash.prefix(7))" : "Cherry-pick \(hashes.count) commits",
-                oldHead: oldHead,
-                redoOperation: .cherryPickCommits(commits: hashes)
-            )
+            if executionLocation == .currentWorkingCopy {
+                await registerHeadChangingUndo(
+                    label: hashes.count == 1 ? "Cherry-pick \(confirmation.commits[0].hash.prefix(7))" : "Cherry-pick \(hashes.count) commits",
+                    oldHead: oldHead,
+                    redoOperation: .cherryPickCommits(commits: hashes)
+                )
+            }
             await syncState.refresh(repositoryURL: repositoryURL)
             NotificationCenter.default.post(
                 name: .repositoryDidChange,
@@ -716,9 +718,18 @@ struct MainWindowView: View {
             )
         } catch {
             await syncState.refresh(repositoryURL: repositoryURL)
+            if error is GitCherryPickWorktreeError {
+                NotificationCenter.default.post(
+                    name: .repositoryDidChange,
+                    object: nil,
+                    userInfo: ["repositoryURL": repositoryURL]
+                )
+            }
             await MainActor.run {
                 let message = error.localizedDescription
-                if message.uppercased().contains("CONFLICT") {
+                if error is GitCherryPickWorktreeError {
+                    syncState.showError(message)
+                } else if message.uppercased().contains("CONFLICT") {
                     syncState.showError("Cherry-pick produced conflicts. Resolve them in the File status view, then continue or abort.")
                 } else {
                     syncState.showError(message)

@@ -6,6 +6,14 @@ enum WorktreeAddTarget: Sendable, Equatable {
 }
 
 extension GitStatusService {
+    func worktreePath(for branch: String, in repositoryURL: URL) async throws -> URL? {
+        let output = try await runGit(
+            arguments: ["worktree", "list", "--porcelain"],
+            in: repositoryURL
+        )
+        return parseWorktreePorcelain(output).first(where: { $0.branch == branch })?.path
+    }
+
     func worktrees(in repositoryURL: URL) async -> [WorktreeEntry] {
         let output = (try? await runGit(arguments: ["worktree", "list", "--porcelain"], in: repositoryURL)) ?? ""
         let parsed = parseWorktreePorcelain(output)

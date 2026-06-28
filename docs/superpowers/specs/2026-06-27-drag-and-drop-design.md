@@ -20,7 +20,7 @@ Reference: [Tower - More Productive with Drag and Drop](https://www.git-tower.co
 
 ## Safety Boundary
 
-Commit drops are accepted by any local branch. After explicit confirmation, macgit checks out a non-current target before cherry-picking and leaves that branch checked out. Branch merge and rebase drops remain limited to the currently checked-out branch.
+Commit drops are accepted by any local branch. After explicit confirmation, a current-branch target uses the open working copy. A non-current target uses its existing worktree or a unique temporary worktree, without switching or modifying the open working copy. Branch merge and rebase drops remain limited to the currently checked-out branch.
 
 Every accepted drop opens a confirmation sheet before Git runs. Merge is the default branch operation; holding Option while dropping preselects Rebase. Stash-to-working-copy is Apply-only in v1, while Pop remains available through the existing context menu.
 
@@ -72,7 +72,7 @@ This keeps drag decoration close to each row while avoiding Git execution logic 
 - A batch is normalized into oldest-first History order before cherry-pick.
 - Every local branch row highlights with a distinct fill and border while a commit payload is over it and shows a concise cherry-pick action label.
 - Dropping opens a confirmation that lists the target branch and ordered commits.
-- Confirming a non-current target checks out that branch before cherry-picking and leaves it checked out.
+- Confirming a non-current target cherry-picks in an existing or temporary worktree and leaves the open working copy unchanged.
 
 Multi-selection applies only to drag actions in v1. The detail panel continues to show the primary selected commit.
 
@@ -137,7 +137,7 @@ If the current branch changes between drop and confirmation, the request is reje
 
 | Action | Command shape | Notes |
 |---|---|---|
-| Cherry-pick commits | `git cherry-pick <oldest> ... <newest>` | One sequenced operation and one undo entry. |
+| Cherry-pick commits | `git cherry-pick <oldest> ... <newest>` | Runs in the current working copy for the current branch, otherwise in the destination branch worktree. |
 | Merge branch | `git merge <source>` | Runs only with the destination checked out. |
 | Rebase current branch | `git rebase <source>` | Runs only with the current branch checked out. |
 | Create branch | `git branch <name> <start>` or existing checkout variant | Reuses Create Branch behavior. |
@@ -148,7 +148,8 @@ Arguments are passed through `Process.arguments`; no shell command strings are c
 
 ## Undo and Refresh Behavior
 
-- Batch cherry-pick captures HEAD before and after the full successful sequence. Undo resets to the old HEAD using the existing expected-HEAD guard; redo cherry-picks the same ordered hashes.
+- A current-branch batch cherry-pick captures HEAD before and after the full successful sequence. Undo resets to the old HEAD using the existing expected-HEAD guard; redo cherry-picks the same ordered hashes.
+- A non-current-branch cherry-pick does not register a main-working-copy HEAD undo entry because the open checkout was not changed.
 - Merge and rebase use the existing guarded HEAD-changing undo pattern.
 - Create Branch uses the existing create/delete branch undo support.
 - Path-scoped stash records the exact paths and untracked option in its redo operation so redo does not stash unrelated changes.
@@ -166,7 +167,7 @@ Before execution, macgit verifies:
 - The payload has the cardinality required by the target.
 - No incompatible cherry-pick, merge, rebase, or conflict resolution is already in progress.
 
-Cherry-pick, merge, and rebase conflicts use the existing in-progress-operation UI so the user can resolve, continue, or abort from File status. Other Git failures use existing error alerts and preserve enough pending context for the user to review what failed.
+Current-branch cherry-pick, merge, and rebase conflicts use the existing in-progress-operation UI so the user can resolve, continue, or abort from File status. A non-current cherry-pick conflict leaves its existing or temporary worktree intact and reports that path for manual resolution. A non-conflict failure in a temporary worktree attempts `git cherry-pick --abort` followed by forced worktree removal; cleanup failures also report the retained path.
 
 Invalid hover targets do not accept the drop. Valid targets use an accent highlight plus an action label; drag behavior does not rely on color alone.
 
@@ -214,7 +215,7 @@ Each phase includes pure unit tests and real temporary-repository integration te
 - Create Branch uses the dropped commit or branch as its start point.
 - Path-scoped stash stores selected tracked and untracked paths while preserving unrelated changes.
 - Stash apply changes the working copy while retaining the stash entry.
-- Failed or conflicting operations do not register undo entries and expose the existing in-progress state.
+- Failed or conflicting operations do not register undo entries. Non-current cherry-pick conflicts retain and report their worktree.
 
 Run focused tests during each task, then run:
 
@@ -226,7 +227,7 @@ Do not launch the app after verification. Pointer-level drag previews, hover hig
 
 ## Out of Scope for V1
 
-- Arbitrary destination branches or hidden branch checkout.
+- Hidden branch checkout in the open working copy.
 - Remote branch drag sources or targets.
 - Commit reordering, squash, fixup, or revert-by-modifier.
 - Cherry-picking merge commits that require mainline selection.

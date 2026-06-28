@@ -52,7 +52,7 @@ final class GitUndoHistoryIntegrationTests: XCTestCase {
         )
     }
 
-    func testCherryPickOntoNonCurrentBranchChecksOutTarget() async throws {
+    func testCherryPickOntoNonCurrentBranchUsesTemporaryWorktreeAndKeepsMainCheckout() async throws {
         let repoURL = try makeRepoWithTwoFeatureCommits()
         let mainHead = try runGitOutput(["rev-parse", "main"], in: repoURL)
         let featureHead = try runGitOutput(["rev-parse", "feature"], in: repoURL)
@@ -65,11 +65,160 @@ final class GitUndoHistoryIntegrationTests: XCTestCase {
             in: repoURL
         )
 
-        XCTAssertEqual(try runGitOutput(["branch", "--show-current"], in: repoURL), "release")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature-one.txt").path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature-two.txt").path))
+        XCTAssertEqual(try runGitOutput(["branch", "--show-current"], in: repoURL), "main")
+        XCTAssertEqual(try runGitOutput(["rev-parse", "HEAD"], in: repoURL), mainHead)
+        XCTAssertEqual(try runGitOutput(["status", "--porcelain"], in: repoURL), "")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature-one.txt").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature-two.txt").path))
+        XCTAssertNil(try worktreePath(for: "release", in: repoURL))
+        XCTAssertEqual(
+            try runGitOutput(["log", "--format=%s", "-2", "release"], in: repoURL)
+                .components(separatedBy: "\n"),
+            ["feature two", "feature one"]
+        )
         XCTAssertEqual(try runGitOutput(["rev-parse", "main"], in: repoURL), mainHead)
         XCTAssertEqual(try runGitOutput(["rev-parse", "feature"], in: repoURL), featureHead)
+    }
+
+    func testCherryPickOntoCurrentBranchUsesCurrentWorkingCopy() async throws {
+        let repoURL = try makeRepoWithFeatureCommit()
+        let featureHead = try runGitOutput(["rev-parse", "feature"], in: repoURL)
+
+        let location = try await GitStatusService.shared.cherryPickCommits(
+            [featureHead],
+            onto: "main",
+            in: repoURL
+        )
+
+        XCTAssertEqual(location, .currentWorkingCopy)
+        XCTAssertEqual(try runGitOutput(["branch", "--show-current"], in: repoURL), "main")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature.txt").path))
+    }
+
+    func testCherryPickOntoNonCurrentBranchUsesExistingWorktree() async throws {
+        let repoURL = try makeRepoWithFeatureCommit()
+        let mainHead = try runGitOutput(["rev-parse", "main"], in: repoURL)
+        let featureHead = try runGitOutput(["rev-parse", "feature"], in: repoURL)
+        let worktreeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macgit-existing-release-\(UUID().uuidString)", isDirectory: true)
+        try runGit(["branch", "release"], in: repoURL)
+        try runGit(["worktree", "add", worktreeURL.path, "release"], in: repoURL)
+        defer {
+            try? runGit(["worktree", "remove", "--force", worktreeURL.path], in: repoURL)
+        }
+
+        try await GitStatusService.shared.cherryPickCommits(
+            [featureHead],
+            onto: "release",
+            in: repoURL
+        )
+
+        XCTAssertEqual(try runGitOutput(["branch", "--show-current"], in: repoURL), "main")
+        XCTAssertEqual(try runGitOutput(["rev-parse", "HEAD"], in: repoURL), mainHead)
+        XCTAssertEqual(try runGitOutput(["status", "--porcelain"], in: repoURL), "")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: repoURL.appendingPathComponent("feature.txt").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: worktreeURL.appendingPathComponent("feature.txt").path))
+        XCTAssertEqual(try worktreePath(for: "release", in: repoURL)?.standardizedFileURL, worktreeURL.standardizedFileURL)
+    }
+
+    func testCherryPickConflictKeepsTemporaryWorktreeAndReportsPath() async throws {
+        let repoURL = try makeRepoWithConflictingFeatureCommit()
+        let mainHead = try runGitOutput(["rev-parse", "main"], in: repoURL)
+        let featureHead = try runGitOutput(["rev-parse", "feature"], in: repoURL)
+        try runGit(["branch", "release"], in: repoURL)
+        var retainedWorktreeURL: URL?
+        defer {
+            if let retainedWorktreeURL {
+                try? runGit(["cherry-pick", "--abort"], in: retainedWorktreeURL)
+                try? runGit(["worktree", "remove", "--force", retainedWorktreeURL.path], in: repoURL)
+            }
+        }
+
+        do {
+            try await GitStatusService.shared.cherryPickCommits(
+                [featureHead],
+                onto: "release",
+                in: repoURL
+            )
+            XCTFail("cherry-pick should conflict")
+        } catch {
+            retainedWorktreeURL = try worktreePath(for: "release", in: repoURL)
+            let worktreeURL = try XCTUnwrap(retainedWorktreeURL)
+            let worktreeError = try XCTUnwrap(error as? GitCherryPickWorktreeError)
+            XCTAssertNotEqual(worktreeURL.standardizedFileURL, repoURL.standardizedFileURL)
+            XCTAssertEqual(
+                worktreeError.path.resolvingSymlinksInPath(),
+                worktreeURL.resolvingSymlinksInPath()
+            )
+            XCTAssertTrue(error.localizedDescription.contains(worktreeError.path.path))
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("conflict"))
+            XCTAssertFalse(try runGitOutput(["rev-parse", "--verify", "CHERRY_PICK_HEAD"], in: worktreeURL).isEmpty)
+        }
+
+        XCTAssertEqual(try runGitOutput(["branch", "--show-current"], in: repoURL), "main")
+        XCTAssertEqual(try runGitOutput(["rev-parse", "HEAD"], in: repoURL), mainHead)
+        XCTAssertEqual(try runGitOutput(["status", "--porcelain"], in: repoURL), "")
+        XCTAssertEqual(try String(contentsOf: repoURL.appendingPathComponent("tracked.txt"), encoding: .utf8), "main\n")
+    }
+
+    func testCherryPickConflictKeepsExistingWorktreeAndReportsPath() async throws {
+        let repoURL = try makeRepoWithConflictingFeatureCommit()
+        let mainHead = try runGitOutput(["rev-parse", "main"], in: repoURL)
+        let featureHead = try runGitOutput(["rev-parse", "feature"], in: repoURL)
+        let worktreeURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("macgit-existing-conflict-\(UUID().uuidString)", isDirectory: true)
+        try runGit(["branch", "release"], in: repoURL)
+        try runGit(["worktree", "add", worktreeURL.path, "release"], in: repoURL)
+        defer {
+            try? runGit(["cherry-pick", "--abort"], in: worktreeURL)
+            try? runGit(["worktree", "remove", "--force", worktreeURL.path], in: repoURL)
+        }
+
+        do {
+            try await GitStatusService.shared.cherryPickCommits(
+                [featureHead],
+                onto: "release",
+                in: repoURL
+            )
+            XCTFail("cherry-pick should conflict")
+        } catch {
+            let worktreeError = try XCTUnwrap(error as? GitCherryPickWorktreeError)
+            XCTAssertEqual(worktreeError.kind, .existing)
+            XCTAssertEqual(
+                worktreeError.path.resolvingSymlinksInPath().path,
+                worktreeURL.resolvingSymlinksInPath().path
+            )
+            XCTAssertTrue(error.localizedDescription.contains(worktreeError.path.path))
+            XCTAssertTrue(error.localizedDescription.localizedCaseInsensitiveContains("conflict"))
+            XCTAssertFalse(try runGitOutput(["rev-parse", "--verify", "CHERRY_PICK_HEAD"], in: worktreeURL).isEmpty)
+        }
+
+        XCTAssertEqual(try runGitOutput(["branch", "--show-current"], in: repoURL), "main")
+        XCTAssertEqual(try runGitOutput(["rev-parse", "HEAD"], in: repoURL), mainHead)
+        XCTAssertEqual(try runGitOutput(["status", "--porcelain"], in: repoURL), "")
+        XCTAssertEqual(try String(contentsOf: repoURL.appendingPathComponent("tracked.txt"), encoding: .utf8), "main\n")
+    }
+
+    func testCherryPickNonConflictFailureRemovesTemporaryWorktree() async throws {
+        let repoURL = try makeTempRepo()
+        let mainHead = try runGitOutput(["rev-parse", "HEAD"], in: repoURL)
+        try runGit(["branch", "release"], in: repoURL)
+
+        do {
+            try await GitStatusService.shared.cherryPickCommits(
+                ["not-a-commit"],
+                onto: "release",
+                in: repoURL
+            )
+            XCTFail("cherry-pick should fail")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("not-a-commit"))
+        }
+
+        XCTAssertEqual(try runGitOutput(["branch", "--show-current"], in: repoURL), "main")
+        XCTAssertEqual(try runGitOutput(["rev-parse", "HEAD"], in: repoURL), mainHead)
+        XCTAssertEqual(try runGitOutput(["status", "--porcelain"], in: repoURL), "")
+        XCTAssertNil(try worktreePath(for: "release", in: repoURL))
     }
 
     func testRevertUndoResetsToOldHead() async throws {
@@ -164,6 +313,35 @@ final class GitUndoHistoryIntegrationTests: XCTestCase {
 
         try runGit(["checkout", "main"], in: repoURL)
         return repoURL
+    }
+
+    private func makeRepoWithConflictingFeatureCommit() throws -> URL {
+        let repoURL = try makeTempRepo()
+        try runGit(["checkout", "-b", "feature"], in: repoURL)
+        try "feature\n".write(to: repoURL.appendingPathComponent("tracked.txt"), atomically: true, encoding: .utf8)
+        try runGit(["add", "tracked.txt"], in: repoURL)
+        try runGit(["commit", "-m", "feature change"], in: repoURL)
+
+        try runGit(["checkout", "main"], in: repoURL)
+        try "main\n".write(to: repoURL.appendingPathComponent("tracked.txt"), atomically: true, encoding: .utf8)
+        try runGit(["add", "tracked.txt"], in: repoURL)
+        try runGit(["commit", "-m", "main change"], in: repoURL)
+        return repoURL
+    }
+
+    private func worktreePath(for branch: String, in repositoryURL: URL) throws -> URL? {
+        let output = try runGitOutput(["worktree", "list", "--porcelain"], in: repositoryURL)
+        let branchRef = "branch refs/heads/\(branch)"
+
+        for block in output.components(separatedBy: "\n\n") where block.contains(branchRef) {
+            guard let pathLine = block.components(separatedBy: "\n").first(where: { $0.hasPrefix("worktree ") }) else {
+                continue
+            }
+            let path = String(pathLine.dropFirst("worktree ".count))
+            return URL(fileURLWithPath: path, isDirectory: true)
+        }
+
+        return nil
     }
 
     private func runGit(_ arguments: [String], in repositoryURL: URL) throws {

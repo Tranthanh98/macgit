@@ -296,11 +296,11 @@ Add `onRequestGitDrop: (GitDragDropRequest) -> Void`. Attach `dropDestination(fo
 
 - [x] **Step 5: Execute requests in MainWindowView**
 
-Store pending drag request and branch start point. Before cherry-pick, recheck `syncState.isAnySyncing`, `syncState.inProgressOperation`, and conflicts. Capture the target branch HEAD, check out a non-current target after confirmation, call `cherryPickCommits`, and register one reset/redo entry. A create-branch request presents the existing sheet with its initial start point.
+Store pending drag request and branch start point. Before cherry-pick, recheck `syncState.isAnySyncing`, `syncState.inProgressOperation`, and conflicts. For the current branch, capture HEAD, cherry-pick in the open working copy, and register one reset/redo entry. For a non-current branch, reuse its existing worktree or create a unique temporary worktree, cherry-pick there, and never switch the open repository. A create-branch request presents the existing sheet with its initial start point.
 
 - [x] **Step 6: Handle failure state**
 
-On conflict, refresh `SyncState`, select File status, show conflict guidance, and register no undo. If the target branch disappeared or another operation is active, show an error without cherry-picking.
+On a current-branch conflict, refresh `SyncState`, select File status, show conflict guidance, and register no undo. On a non-current conflict, retain the existing or temporary worktree and report its path for manual resolution. Abort and force-remove a temporary worktree after non-conflict cherry-pick failures; if cleanup fails, include the retained path in the error. If the target branch disappeared or another operation is active, show an error without cherry-picking.
 
 - [x] **Step 7: Run focused tests, build, and commit**
 

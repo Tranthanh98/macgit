@@ -107,16 +107,122 @@ extension GitStatusService {
         _ = try await runGit(arguments: ["cherry-pick"] + commits, in: repositoryURL)
     }
 
+    @discardableResult
     func cherryPickCommits(
         _ commits: [String],
         onto targetBranch: String,
         in repositoryURL: URL
-    ) async throws {
-        let currentBranch = await currentBranch(in: repositoryURL)
-        if currentBranch != targetBranch {
-            try await checkoutCommit(targetBranch, in: repositoryURL)
+    ) async throws -> GitCherryPickExecutionLocation {
+        guard !commits.isEmpty else {
+            throw GitError.commandFailed("Select at least one commit to cherry-pick.")
         }
-        try await cherryPickCommits(commits, in: repositoryURL)
+
+        let currentBranch = await currentBranch(in: repositoryURL)
+        if currentBranch == targetBranch {
+            try await cherryPickCommits(commits, in: repositoryURL)
+            return .currentWorkingCopy
+        }
+
+        if let existingWorktree = try await worktreePath(for: targetBranch, in: repositoryURL) {
+            do {
+                try await cherryPickCommits(commits, in: existingWorktree)
+                return .existingWorktree(existingWorktree)
+            } catch {
+                throw await worktreeCherryPickError(
+                    from: error,
+                    path: existingWorktree,
+                    kind: .existing
+                )
+            }
+        }
+
+        let temporaryWorktree = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            .appendingPathComponent("macgit-cherry-pick-\(UUID().uuidString)", isDirectory: true)
+        _ = try await runGit(
+            arguments: ["worktree", "add", temporaryWorktree.path, targetBranch],
+            in: repositoryURL
+        )
+
+        do {
+            try await cherryPickCommits(commits, in: temporaryWorktree)
+        } catch {
+            let cherryPickError = await worktreeCherryPickError(
+                from: error,
+                path: temporaryWorktree,
+                kind: .temporary
+            )
+            if cherryPickError.isConflict {
+                throw cherryPickError
+            }
+
+            let abortError = await cleanupError {
+                _ = try await runGit(arguments: ["cherry-pick", "--abort"], in: temporaryWorktree)
+            }
+            do {
+                _ = try await runGit(
+                    arguments: ["worktree", "remove", temporaryWorktree.path, "--force"],
+                    in: repositoryURL
+                )
+            } catch {
+                let cleanupDetails = [abortError, error.localizedDescription]
+                    .compactMap { $0 }
+                    .joined(separator: "\n")
+                throw GitCherryPickWorktreeError(
+                    path: temporaryWorktree,
+                    kind: .temporary,
+                    isConflict: false,
+                    gitMessage: cherryPickError.gitMessage,
+                    cleanupMessage: cleanupDetails
+                )
+            }
+
+            throw error
+        }
+
+        do {
+            _ = try await runGit(
+                arguments: ["worktree", "remove", temporaryWorktree.path],
+                in: repositoryURL
+            )
+        } catch {
+            throw GitCherryPickWorktreeError(
+                path: temporaryWorktree,
+                kind: .temporary,
+                isConflict: false,
+                gitMessage: "Cherry-pick succeeded, but the temporary worktree could not be removed.",
+                cleanupMessage: error.localizedDescription
+            )
+        }
+
+        return .temporaryWorktree
+    }
+
+    private func worktreeCherryPickError(
+        from error: Error,
+        path: URL,
+        kind: GitCherryPickWorktreeError.WorktreeKind
+    ) async -> GitCherryPickWorktreeError {
+        let message = error.localizedDescription
+        let hasCherryPickHead = (try? await runGit(
+            arguments: ["rev-parse", "--verify", "CHERRY_PICK_HEAD"],
+            in: path
+        )) != nil
+        return GitCherryPickWorktreeError(
+            path: path,
+            kind: kind,
+            isConflict: hasCherryPickHead || message.localizedCaseInsensitiveContains("conflict"),
+            gitMessage: message,
+            cleanupMessage: nil
+        )
+    }
+
+    private func cleanupError(_ operation: () async throws -> Void) async -> String? {
+        do {
+            try await operation()
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     func mergeCommit(_ commit: String, noCommit: Bool = false, log: Bool = false, in repositoryURL: URL) async throws {

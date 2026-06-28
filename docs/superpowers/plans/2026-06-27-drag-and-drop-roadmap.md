@@ -28,14 +28,14 @@ Do not start a phase until every earlier phase is merged to `main`, committed, a
 
 ## Shared Rules
 
-- A non-current commit target is checked out only after explicit cherry-pick confirmation.
+- A non-current commit target runs in an existing or temporary worktree after explicit cherry-pick confirmation; the open working copy is never switched.
 - Commit actions accept any local branch; branch merge/rebase actions accept only the current branch.
 - A drop opens confirmation; Git does not run from a hover or drop callback.
 - Payload repository paths must match the receiving window's standardized repository path.
 - Remote branches and merge-commit cherry-picks are rejected in v1.
-- Original Git actions register undo only after successful completion.
+- Current-working-copy Git actions register undo only after successful completion; worktree-only cherry-picks do not register a main-HEAD undo.
 - Successful actions refresh `SyncState` and post `.repositoryDidChange`.
-- Conflicted cherry-pick, merge, and rebase actions expose existing in-progress/conflict UI and do not register undo.
+- Current-working-copy conflicts expose existing in-progress/conflict UI. Non-current cherry-pick conflicts retain and report their worktree path. Failed actions do not register undo.
 - Use macOS 26 `dropDestination(for:isEnabled:action:)` and `onDropSessionUpdated(_:)`, not the deprecated targeted overload.
 - Run focused tests during development and the full `xcodebuild ... test` command before marking a phase completed.
 - Do not launch the app after build/test verification.
@@ -46,9 +46,9 @@ Do not start a phase until every earlier phase is merged to `main`, committed, a
 
 - Plain, Command, and Shift commit selection works in the custom History graph list.
 - Dragging selected non-merge commits onto any local branch highlights that row and opens batch cherry-pick confirmation.
-- Confirming a non-current target checks it out before cherry-picking and leaves it checked out.
+- Confirming a non-current target uses an existing or temporary worktree and leaves the open branch and working directory unchanged.
 - Dragging one commit onto BRANCHES opens Create Branch with that commit selected.
-- A completed batch cherry-pick has one guarded undo/redo entry.
+- A completed current-branch batch cherry-pick has one guarded undo/redo entry.
 
 ### After Phase 2
 
