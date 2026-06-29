@@ -136,6 +136,7 @@ struct SidebarView: View {
     let onRequestPushToTracked: (String) -> Void
     let onRequestRenameBranch: (String) -> Void
     let onRequestCreatePullRequest: (String) -> Void
+    let onRequestRebaseOnto: (String) -> Void
     let onRequestPushBranchToRemote: (String, String) -> Void
     let onRequestTrackRemoteBranch: (String, String?) -> Void
     let onRequestApplyStash: (String) -> Void
@@ -222,6 +223,7 @@ struct SidebarView: View {
         onRequestPushToTracked: @escaping (String) -> Void = { _ in },
         onRequestRenameBranch: @escaping (String) -> Void = { _ in },
         onRequestCreatePullRequest: @escaping (String) -> Void = { _ in },
+        onRequestRebaseOnto: @escaping (String) -> Void = { _ in },
         onRequestPushBranchToRemote: @escaping (String, String) -> Void = { _, _ in },
         onRequestTrackRemoteBranch: @escaping (String, String?) -> Void = { _, _ in },
         onRequestApplyStash: @escaping (String) -> Void = { _ in },
@@ -242,6 +244,7 @@ struct SidebarView: View {
         self.onRequestPushToTracked = onRequestPushToTracked
         self.onRequestRenameBranch = onRequestRenameBranch
         self.onRequestCreatePullRequest = onRequestCreatePullRequest
+        self.onRequestRebaseOnto = onRequestRebaseOnto
         self.onRequestPushBranchToRemote = onRequestPushBranchToRemote
         self.onRequestTrackRemoteBranch = onRequestTrackRemoteBranch
         self.onRequestApplyStash = onRequestApplyStash
@@ -1165,8 +1168,10 @@ struct SidebarView: View {
 
         Button("Merge \(branch) into \(currentBranch)") {}
             .disabled(true)
-        Button("Rebase current changes onto \(branch)") {}
-            .disabled(true)
+        Button("Rebase current changes onto \(branch)") {
+            onRequestRebaseOnto(branch)
+        }
+        .disabled(branch == currentBranch)
 
         Divider()
 
@@ -2329,6 +2334,7 @@ struct SidebarView: View {
         onRequestPushToTracked: { _ in },
         onRequestRenameBranch: { _ in },
         onRequestCreatePullRequest: { _ in },
+        onRequestRebaseOnto: { _ in },
         onRequestOpenWorktree: { _ in },
         onRequestOpenWorktreeInTerminal: { _ in }
     )

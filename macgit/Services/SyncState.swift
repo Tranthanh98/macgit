@@ -308,6 +308,38 @@ class SyncState: ObservableObject {
         await performPush(options: options, repositoryURL: repositoryURL, undoManager: undoManager)
     }
 
+    func performRebaseOnto(branch: String, repositoryURL: URL, undoManager: GitUndoManager? = nil) async {
+        if await checkConflicts(repositoryURL: repositoryURL) { return }
+        let oldHead = await GitStatusService.shared.tipHash(for: "HEAD", in: repositoryURL)
+        do {
+            try await GitStatusService.shared.rebaseCommit(branch, in: repositoryURL)
+            if let oldHead,
+               let newHead = await GitStatusService.shared.tipHash(for: "HEAD", in: repositoryURL),
+               oldHead != newHead {
+                await MainActor.run {
+                    undoManager?.register(
+                        GitUndoEntry(
+                            repositoryURL: repositoryURL,
+                            label: "Rebase onto \(branch)",
+                            undoOperation: .resetHead(target: oldHead, mode: .hard, expectedHead: newHead),
+                            redoOperation: .rebaseOnto(commit: branch)
+                        )
+                    )
+                }
+            }
+            await refresh(repositoryURL: repositoryURL)
+            notifyRepositoryChanged(repositoryURL)
+            showInfo("Rebased current branch onto \(branch).")
+        } catch {
+            let message = error.localizedDescription
+            if message.uppercased().contains("CONFLICT") {
+                showConflict("Merge conflicts occurred during Rebase. Please resolve them in the File status view.")
+            } else {
+                showError(message)
+            }
+        }
+    }
+
     func performFetch(options: GitStatusService.FetchOptions, repositoryURL: URL) async {
         await MainActor.run { isFetching = true }
         defer { Task { @MainActor in isFetching = false } }

@@ -321,6 +321,15 @@ struct MainWindowView: View {
                     await openPullRequest(branch: branch)
                 }
             },
+            onRequestRebaseOnto: { branch in
+                Task {
+                    await syncState.performRebaseOnto(
+                        branch: branch,
+                        repositoryURL: repositoryURL,
+                        undoManager: undoManager
+                    )
+                }
+            },
             onRequestPushBranchToRemote: { branch, remote in
                 Task {
                     let options = GitStatusService.PushOptions(
