@@ -57,6 +57,7 @@ indirect enum GitUndoOperation: Equatable {
     case checkoutRef(ref: String)
     case createLocalBranch(name: String, startPoint: String, checkout: Bool)
     case deleteLocalBranch(name: String, force: Bool, expectedTip: String?)
+    case renameLocalBranch(from: String, to: String)
     case deleteRemoteBranch(remote: String, branch: String, expectedHash: String)
     case pushBranch(remote: String, localBranch: String, remoteBranch: String)
     case setUpstream(branch: String, upstream: String)

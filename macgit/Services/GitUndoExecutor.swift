@@ -130,6 +130,8 @@ struct GitUndoExecutor {
             }
             let flag = force ? "-D" : "-d"
             _ = try await runner.runGit(arguments: ["branch", flag, name], in: repositoryURL)
+        case .renameLocalBranch(let from, let to):
+            _ = try await runner.runGit(arguments: ["branch", "-m", from, to], in: repositoryURL)
         case .deleteRemoteBranch(let remote, let branch, let expectedHash):
             let actualHash = try await remoteSupport.remoteHash(remote: remote, branch: branch, in: repositoryURL)
             guard actualHash == expectedHash else {

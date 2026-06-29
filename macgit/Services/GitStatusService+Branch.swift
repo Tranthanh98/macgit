@@ -98,6 +98,10 @@ extension GitStatusService {
         return try await runGit(arguments: ["branch", flag, name], in: repositoryURL)
     }
 
+    func renameBranch(from oldName: String, to newName: String, in repositoryURL: URL) async throws -> String {
+        return try await runGit(arguments: ["branch", "-m", oldName, newName], in: repositoryURL)
+    }
+
     func deleteRemoteBranch(remote: String, name: String, in repositoryURL: URL) async throws -> String {
         return try await runGit(arguments: ["push", remote, "--delete", name], in: repositoryURL)
     }

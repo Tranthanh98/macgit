@@ -61,6 +61,8 @@ struct MainWindowView: View {
     @State private var showingStashSheet = false
     @State private var showingCheckoutConfirmation = false
     @State private var branchToCheckout: String = ""
+    @State private var showingRenameBranchSheet = false
+    @State private var branchToRename: String = ""
     @State private var showingDetachedHeadConfirmation = false
     @State private var tagToCheckout: String = ""
     @State private var pendingStashRef: String?
@@ -142,6 +144,7 @@ struct MainWindowView: View {
             .sheet(item: $pendingBranchDropConfirmation) { confirmation in
                 branchDropConfirmationSheet(for: confirmation)
             }
+            .sheet(isPresented: $showingRenameBranchSheet) { renameSheet }
             .sheet(isPresented: $showingCheckoutConfirmation) {
                 CheckoutConfirmationSheet(branchName: branchToCheckout) { stash in
                     Task {
@@ -308,6 +311,10 @@ struct MainWindowView: View {
                         undoManager: undoManager
                     )
                 }
+            },
+            onRequestRenameBranch: { branch in
+                branchToRename = branch
+                showingRenameBranchSheet = true
             },
             onRequestPushBranchToRemote: { branch, remote in
                 Task {
@@ -497,10 +504,25 @@ struct MainWindowView: View {
             undoManager: undoManager,
             initialStartPoint: branchSheetStartPoint,
             onCompleted: {
-            Task {
-                await syncState.refresh(repositoryURL: repositoryURL)
+                Task {
+                    await syncState.refresh(repositoryURL: repositoryURL)
+                }
             }
-        })
+        )
+    }
+
+    @ViewBuilder
+    private var renameSheet: some View {
+        RenameBranchSheetView(
+            repositoryURL: repositoryURL,
+            currentName: branchToRename,
+            undoManager: undoManager,
+            onCompleted: {
+                Task {
+                    await syncState.refresh(repositoryURL: repositoryURL)
+                }
+            }
+        )
     }
 
     @ViewBuilder
