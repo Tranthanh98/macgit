@@ -290,6 +290,15 @@ struct MainWindowView: View {
                     )
                 }
             },
+            onRequestPullTracked: { branch in
+                Task {
+                    await syncState.performPullBranch(
+                        branch: branch,
+                        repositoryURL: repositoryURL,
+                        undoManager: undoManager
+                    )
+                }
+            },
             onRequestPushBranchToRemote: { branch, remote in
                 Task {
                     let options = GitStatusService.PushOptions(

@@ -132,6 +132,7 @@ struct SidebarView: View {
     let isBranchSyncing: (String) -> Bool
     let onRequestCheckout: (String, Bool) -> Void
     let onRequestFetchBranch: (String) -> Void
+    let onRequestPullTracked: (String) -> Void
     let onRequestPushBranchToRemote: (String, String) -> Void
     let onRequestTrackRemoteBranch: (String, String?) -> Void
     let onRequestApplyStash: (String) -> Void
@@ -214,6 +215,7 @@ struct SidebarView: View {
         isBranchSyncing: @escaping (String) -> Bool = { _ in false },
         onRequestCheckout: @escaping (String, Bool) -> Void,
         onRequestFetchBranch: @escaping (String) -> Void,
+        onRequestPullTracked: @escaping (String) -> Void = { _ in },
         onRequestPushBranchToRemote: @escaping (String, String) -> Void = { _, _ in },
         onRequestTrackRemoteBranch: @escaping (String, String?) -> Void = { _, _ in },
         onRequestApplyStash: @escaping (String) -> Void = { _ in },
@@ -230,6 +232,7 @@ struct SidebarView: View {
         self.isBranchSyncing = isBranchSyncing
         self.onRequestCheckout = onRequestCheckout
         self.onRequestFetchBranch = onRequestFetchBranch
+        self.onRequestPullTracked = onRequestPullTracked
         self.onRequestPushBranchToRemote = onRequestPushBranchToRemote
         self.onRequestTrackRemoteBranch = onRequestTrackRemoteBranch
         self.onRequestApplyStash = onRequestApplyStash
@@ -1162,6 +1165,12 @@ struct SidebarView: View {
             onRequestFetchBranch(branch)
         }
         .disabled(!BranchFetchActionPolicy.shouldEnableFetch(for: branchSyncStatus[branch]))
+        let currentUpstream = upstreamByBranch[branch]
+        let pullLabel = currentUpstream.map { "Pull \($0) (tracked)" } ?? "Pull (tracked)"
+        Button(pullLabel) {
+            onRequestPullTracked(branch)
+        }
+        .disabled(!BranchPullActionPolicy.shouldEnablePullFromUpstream(for: currentUpstream))
         Menu("Push to") {
             if remoteNames.isEmpty {
                 Text("No remotes configured")
@@ -2299,6 +2308,7 @@ struct SidebarView: View {
         isBranchSyncing: { _ in false },
         onRequestCheckout: { _, _ in },
         onRequestFetchBranch: { _ in },
+        onRequestPullTracked: { _ in },
         onRequestOpenWorktree: { _ in },
         onRequestOpenWorktreeInTerminal: { _ in }
     )
