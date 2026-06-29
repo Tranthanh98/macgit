@@ -572,6 +572,12 @@ struct MainWindowView: View {
         await syncState.refresh(repositoryURL: repositoryURL)
         syncState.startBackgroundSync(repositoryURL: repositoryURL, settings: loadedSettings)
         await refreshRemotePresentation(for: loadedSettings.defaultRemoteName)
+
+        await MainActor.run {
+            if syncState.commitBadgeCount == 0, selectedItem == .item(.fileStatus) {
+                selectedItem = .item(.history)
+            }
+        }
     }
 
     @ViewBuilder
