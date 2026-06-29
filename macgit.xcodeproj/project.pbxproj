@@ -353,7 +353,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright (C) 2026 Thanh Tran. Licensed under the GNU Affero General Public License v3.";
 				INFOPLIST_KEY_SUAllowsAutomaticUpdates = NO;
 				INFOPLIST_KEY_SUAutomaticallyUpdate = NO;
 				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
@@ -391,7 +391,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright (C) 2026 Thanh Tran. Licensed under the GNU Affero General Public License v3.";
 				INFOPLIST_KEY_SUAllowsAutomaticUpdates = NO;
 				INFOPLIST_KEY_SUAutomaticallyUpdate = NO;
 				INFOPLIST_KEY_SUEnableAutomaticChecks = YES;
