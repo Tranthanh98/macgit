@@ -518,6 +518,11 @@ struct MainWindowView: View {
             onCompleted: {
                 Task {
                     await syncState.refresh(repositoryURL: repositoryURL)
+                    NotificationCenter.default.post(
+                        name: .repositoryDidChange,
+                        object: nil,
+                        userInfo: ["repositoryURL": repositoryURL]
+                    )
                 }
             }
         )
@@ -532,6 +537,11 @@ struct MainWindowView: View {
             onCompleted: {
                 Task {
                     await syncState.refresh(repositoryURL: repositoryURL)
+                    NotificationCenter.default.post(
+                        name: .repositoryDidChange,
+                        object: nil,
+                        userInfo: ["repositoryURL": repositoryURL]
+                    )
                 }
             }
         )
