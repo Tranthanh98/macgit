@@ -168,6 +168,7 @@ struct SidebarView: View {
     @State private var showingError = false
     @State private var branchToDelete: String?
     @State private var showingDeleteConfirmation = false
+    @State private var forceDeleteBranch = false
     @State private var activeDropTarget: GitDragTarget?
     @State private var activeDropLabel: String?
     @State private var isCurrentBranchDropTargeted = false
@@ -370,15 +371,8 @@ struct SidebarView: View {
             } message: {
                 Text(errorMessage)
             }
-            .alert("Delete Branch", isPresented: $showingDeleteConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) {
-                    if let branch = branchToDelete {
-                        Task { await deleteBranch(branch) }
-                    }
-                }
-            } message: {
-                Text("Are you sure you want to delete the branch '\(branchToDelete ?? "")'?")
+            .sheet(isPresented: $showingDeleteConfirmation) {
+                deleteBranchConfirmationSheet
             }
             .alert("Remove Worktree", isPresented: $showingWorktreeRemovalConfirmation) {
                 Button("Cancel", role: .cancel) {}
@@ -1370,6 +1364,51 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
+    private var deleteBranchConfirmationSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Delete Branch")
+                .font(.title2)
+                .fontWeight(.semibold)
+
+            Text("Are you sure you want to delete the branch '\(branchToDelete ?? "")'?")
+                .font(.system(size: 13))
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("Force delete regardless of merge status", isOn: $forceDeleteBranch)
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 12))
+
+                Text("Use \u{201C}git branch -D\u{201D}. Required for branches that are not fully merged; otherwise their commits may become unreachable.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 12) {
+                Spacer()
+                Button("Cancel", role: .cancel) {
+                    showingDeleteConfirmation = false
+                    forceDeleteBranch = false
+                }
+                .keyboardShortcut(.cancelAction)
+
+                Button(forceDeleteBranch ? "Force Delete" : "Delete", role: .destructive) {
+                    if let branch = branchToDelete {
+                        let force = forceDeleteBranch
+                        showingDeleteConfirmation = false
+                        forceDeleteBranch = false
+                        Task { await deleteBranch(branch, force: force) }
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 420, idealWidth: 480)
+    }
+
+    @ViewBuilder
     private var worktreeCheckoutSheet: some View {
         if let entry = worktreeToCheckout {
             VStack(alignment: .leading, spacing: 16) {
@@ -1535,12 +1574,12 @@ struct SidebarView: View {
         .frame(minWidth: 440, idealWidth: 500)
     }
 
-    private func deleteBranch(_ branch: String) async {
+    private func deleteBranch(_ branch: String, force: Bool = false) async {
         do {
             let support = GitBranchUndoSupport()
             let tip = try await support.tip(of: branch, in: repositoryURL)
             let upstream = await support.upstream(of: branch, in: repositoryURL)
-            _ = try await GitStatusService.shared.deleteBranch(name: branch, force: false, in: repositoryURL)
+            _ = try await GitStatusService.shared.deleteBranch(name: branch, force: force, in: repositoryURL)
 
             await MainActor.run {
                 var undoOperations: [GitUndoOperation] = [
@@ -1556,7 +1595,7 @@ struct SidebarView: View {
                         repositoryURL: repositoryURL,
                         label: "Delete branch \(branch)",
                         undoOperation: .sequence(undoOperations),
-                        redoOperation: .deleteLocalBranch(name: branch, force: false, expectedTip: tip)
+                        redoOperation: .deleteLocalBranch(name: branch, force: force, expectedTip: tip)
                     )
                 )
             }
@@ -1612,8 +1651,16 @@ struct SidebarView: View {
             currentBranch = current
             headHash = headHashValue
             branchSyncStatus = syncMap
-            expandedFolders = SidebarTreeBuilder.expandedFolderPaths(revealing: current)
+            let reveal = SidebarTreeBuilder.expandedFolderPaths(revealing: current)
                 .intersection(allFolders)
+            if hasLoadedBranches {
+                // Subsequent reloads: preserve user-expanded folders, reveal the
+                // current branch, and drop folders that no longer exist.
+                expandedFolders = expandedFolders.union(reveal).intersection(allFolders)
+            } else {
+                // First load: reveal the current branch.
+                expandedFolders = reveal
+            }
             hasLoadedBranches = true
         }
     }
