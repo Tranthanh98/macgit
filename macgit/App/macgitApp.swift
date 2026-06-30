@@ -156,9 +156,17 @@ struct macgitApp: App {
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }
 
-            CommandGroup(after: .toolbar) {
-                Toggle("Show Button Text", isOn: $appState.showToolbarButtonText)
-                    .keyboardShortcut("t", modifiers: [.command, .option])
+            CommandGroup(before: .toolbar) {
+                Toggle(isOn: $appState.showToolbarButtonText) {
+                    Label("Show Button Text", systemImage: "character.textbox")
+                }
+                .keyboardShortcut("t", modifiers: [.command, .option])
+                Toggle(isOn: $appState.showSubmodules) {
+                    Label("Show Submodules", systemImage: "folder.badge.gearshape")
+                }
+                Toggle(isOn: $appState.showSubtrees) {
+                    Label("Show Subtrees", systemImage: "tree")
+                }
             }
         }
     }

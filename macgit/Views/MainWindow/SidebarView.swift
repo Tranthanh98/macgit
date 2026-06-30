@@ -134,6 +134,7 @@ enum SidebarBranchSyncBadgeResolver {
 
 struct SidebarView: View {
     @EnvironmentObject private var appUpdateController: AppUpdateController
+    @EnvironmentObject private var appState: AppState
 
     let repositoryURL: URL
     @Binding var selection: SidebarSelection?
@@ -416,15 +417,23 @@ struct SidebarView: View {
                     }
                 }
 
-                // TODO: Re-enable when submodule/subtree support is implemented
-                // ForEach([SidebarSection.submodules, .subtrees], id: \.self) { section in
-                //     Section(section.rawValue) {
-                //         Text("Coming soon")
-                //             .font(.caption)
-                //             .foregroundStyle(.secondary)
-                //     }
-                //     .disabled(true)
-                // }
+                if appState.showSubmodules {
+                    Section(SidebarSection.submodules.rawValue) {
+                        Text("Coming soon")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .disabled(true)
+                }
+
+                if appState.showSubtrees {
+                    Section(SidebarSection.subtrees.rawValue) {
+                        Text("Coming soon")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .disabled(true)
+                }
             }
             .listStyle(.sidebar)
             .task(id: repositoryURL) {
@@ -2577,4 +2586,5 @@ struct SidebarView: View {
         onRequestOpenWorktree: { _ in },
         onRequestOpenWorktreeInTerminal: { _ in }
     )
+    .environmentObject(AppState.shared)
 }

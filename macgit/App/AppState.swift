@@ -35,6 +35,8 @@ enum FileMenuAction: Equatable {
 final class AppState: ObservableObject {
     static let shared = AppState()
     private static let showToolbarButtonTextKey = "showToolbarButtonText"
+    private static let showSubmodulesKey = "showSubmodules"
+    private static let showSubtreesKey = "showSubtrees"
 
     @Published var fileMenuAction: FileMenuAction?
     @Published var openWindowWithCloneSheet = false
@@ -45,8 +47,20 @@ final class AppState: ObservableObject {
             UserDefaults.standard.set(showToolbarButtonText, forKey: Self.showToolbarButtonTextKey)
         }
     }
+    @Published var showSubmodules: Bool {
+        didSet {
+            UserDefaults.standard.set(showSubmodules, forKey: Self.showSubmodulesKey)
+        }
+    }
+    @Published var showSubtrees: Bool {
+        didSet {
+            UserDefaults.standard.set(showSubtrees, forKey: Self.showSubtreesKey)
+        }
+    }
 
     private init() {
         showToolbarButtonText = UserDefaults.standard.object(forKey: Self.showToolbarButtonTextKey) as? Bool ?? true
+        showSubmodules = UserDefaults.standard.object(forKey: Self.showSubmodulesKey) as? Bool ?? false
+        showSubtrees = UserDefaults.standard.object(forKey: Self.showSubtreesKey) as? Bool ?? false
     }
 }
