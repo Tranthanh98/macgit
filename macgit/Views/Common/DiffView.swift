@@ -70,7 +70,7 @@ struct DiffView: View {
     }
 
     var body: some View {
-        if hunks.isEmpty && isImageFile {
+        if isImageFile {
             imagePreview
         } else if hunks.isEmpty {
             EmptyStateView(message: "No diff to display", detail: "Select a file to see changes")
@@ -153,6 +153,7 @@ struct DiffView: View {
                     .clipped()
             }
         }
+        .padding(12)
     }
 }
 
