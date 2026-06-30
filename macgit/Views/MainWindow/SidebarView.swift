@@ -141,6 +141,7 @@ struct SidebarView: View {
     let onRequestCreateBranchFromBranch: (String) -> Void
     let onRequestCreateTagFromBranch: (String) -> Void
     let onRequestRebaseOnto: (String) -> Void
+    let onRequestMergeBranchIntoCurrent: (String) -> Void
     let onRequestPushBranchToRemote: (String, String) -> Void
     let onRequestTrackRemoteBranch: (String, String?) -> Void
     let onRequestApplyStash: (String) -> Void
@@ -231,6 +232,7 @@ struct SidebarView: View {
         onRequestCreateBranchFromBranch: @escaping (String) -> Void = { _ in },
         onRequestCreateTagFromBranch: @escaping (String) -> Void = { _ in },
         onRequestRebaseOnto: @escaping (String) -> Void = { _ in },
+        onRequestMergeBranchIntoCurrent: @escaping (String) -> Void = { _ in },
         onRequestPushBranchToRemote: @escaping (String, String) -> Void = { _, _ in },
         onRequestTrackRemoteBranch: @escaping (String, String?) -> Void = { _, _ in },
         onRequestApplyStash: @escaping (String) -> Void = { _ in },
@@ -254,6 +256,7 @@ struct SidebarView: View {
         self.onRequestCreateBranchFromBranch = onRequestCreateBranchFromBranch
         self.onRequestCreateTagFromBranch = onRequestCreateTagFromBranch
         self.onRequestRebaseOnto = onRequestRebaseOnto
+        self.onRequestMergeBranchIntoCurrent = onRequestMergeBranchIntoCurrent
         self.onRequestPushBranchToRemote = onRequestPushBranchToRemote
         self.onRequestTrackRemoteBranch = onRequestTrackRemoteBranch
         self.onRequestApplyStash = onRequestApplyStash
@@ -1228,8 +1231,10 @@ struct SidebarView: View {
 
         Divider()
 
-        Button("Merge \(branch) into \(currentBranch)") {}
-            .disabled(true)
+        Button("Merge \(branch) into \(currentBranch)") {
+            onRequestMergeBranchIntoCurrent(branch)
+        }
+        .disabled(branch == currentBranch)
         Button("Rebase current changes onto \(branch)") {
             onRequestRebaseOnto(branch)
         }
@@ -2406,6 +2411,7 @@ struct SidebarView: View {
         onRequestRenameBranch: { _ in },
         onRequestCreatePullRequest: { _ in },
         onRequestRebaseOnto: { _ in },
+        onRequestMergeBranchIntoCurrent: { _ in },
         onRequestOpenWorktree: { _ in },
         onRequestOpenWorktreeInTerminal: { _ in }
     )

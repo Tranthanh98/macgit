@@ -386,6 +386,15 @@ struct MainWindowView: View {
                     )
                 }
             },
+            onRequestMergeBranchIntoCurrent: { branch in
+                Task {
+                    await syncState.performMerge(
+                        branch: branch,
+                        options: GitStatusService.MergeOptions(),
+                        repositoryURL: repositoryURL
+                    )
+                }
+            },
             onRequestPushBranchToRemote: { branch, remote in
                 Task {
                     let options = GitStatusService.PushOptions(
