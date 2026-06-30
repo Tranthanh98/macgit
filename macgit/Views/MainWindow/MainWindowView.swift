@@ -342,6 +342,17 @@ struct MainWindowView: View {
                     )
                 }
             },
+            onRequestPullRemoteBranch: { remote, branch in
+                Task {
+                    await syncState.performPull(
+                        remote: remote,
+                        branch: branch,
+                        options: GitStatusService.PullOptions(),
+                        repositoryURL: repositoryURL,
+                        undoManager: undoManager
+                    )
+                }
+            },
             onRequestPullTracked: { branch in
                 Task {
                     await syncState.performPullBranch(
@@ -416,6 +427,11 @@ struct MainWindowView: View {
                         upstream: upstream,
                         repositoryURL: repositoryURL
                     )
+                }
+            },
+            onRequestCreatePullRequestForRemote: { remote, branch in
+                Task {
+                    await openPullRequest(remote: remote, branch: branch)
                 }
             },
             onRequestApplyStash: { ref in
@@ -1234,6 +1250,19 @@ struct MainWindowView: View {
         guard let url = PullRequestURLBuilder.build(remoteURL: remoteURL, branch: remoteBranch) else {
             await MainActor.run {
                 syncState.showError("Remote '\(remoteName)' is not a recognized pull request host (GitHub, GitLab, or Bitbucket).")
+            }
+            return
+        }
+        await MainActor.run {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func openPullRequest(remote: String, branch: String) async {
+        let remoteURL = await GitStatusService.shared.remoteURL(remote: remote, in: repositoryURL)
+        guard let url = PullRequestURLBuilder.build(remoteURL: remoteURL, branch: branch) else {
+            await MainActor.run {
+                syncState.showError("Remote '\(remote)' is not a recognized pull request host (GitHub, GitLab, or Bitbucket).")
             }
             return
         }

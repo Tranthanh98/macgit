@@ -79,6 +79,30 @@ extension GitStatusService {
         _ = try await runGit(arguments: ["fetch", remote, branch], in: repositoryURL)
     }
 
+    @discardableResult
+    func checkoutRemoteBranch(remote: String, branch: String, in repositoryURL: URL) async throws -> String {
+        let trimmedRemote = remote.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBranch = branch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedRemote.isEmpty, !trimmedBranch.isEmpty else {
+            throw GitError.commandFailed("Remote branch is required.")
+        }
+        guard trimmedBranch != "HEAD" else {
+            throw GitError.commandFailed("Cannot checkout a remote HEAD symbolic ref.")
+        }
+
+        let localBranches = await localBranches(in: repositoryURL)
+        if localBranches.contains(trimmedBranch) {
+            _ = try await runGit(arguments: ["checkout", trimmedBranch], in: repositoryURL)
+            return trimmedBranch
+        }
+
+        _ = try await runGit(
+            arguments: ["checkout", "-b", trimmedBranch, "--track", "\(trimmedRemote)/\(trimmedBranch)"],
+            in: repositoryURL
+        )
+        return trimmedBranch
+    }
+
     func remotes(in repositoryURL: URL) async -> [String] {
         let output = (try? await runGit(arguments: ["remote"], in: repositoryURL)) ?? ""
         return output.split(separator: "\n").map { String($0) }.filter { !$0.isEmpty }

@@ -64,6 +64,26 @@ final class BranchUpstreamServiceTests: XCTestCase {
         XCTAssertNil(upstreams["untracked"])
     }
 
+    func testCheckoutRemoteBranchCreatesAndTracksLocalBranch() async throws {
+        let repoURL = try makeRepoWithRemote(featureBranch: "feature/from-remote")
+        try runGit(["checkout", "main"], in: repoURL)
+        try runGit(["branch", "-D", "feature/from-remote"], in: repoURL)
+
+        let localBranch = try await GitStatusService.shared.checkoutRemoteBranch(
+            remote: "origin",
+            branch: "feature/from-remote",
+            in: repoURL
+        )
+
+        XCTAssertEqual(localBranch, "feature/from-remote")
+        let currentBranch = await GitStatusService.shared.currentBranch(in: repoURL)
+        let localBranches = await GitStatusService.shared.localBranches(in: repoURL)
+        let upstream = await GitStatusService.shared.upstreamBranch(for: "feature/from-remote", in: repoURL)
+        XCTAssertEqual(currentBranch, "feature/from-remote")
+        XCTAssertTrue(localBranches.contains("feature/from-remote"))
+        XCTAssertEqual(upstream, "origin/feature/from-remote")
+    }
+
     // MARK: - Helpers
 
     private func makeRepoWithRemote(featureBranch: String) throws -> URL {

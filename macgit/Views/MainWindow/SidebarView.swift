@@ -100,6 +100,14 @@ enum DeleteConfirmationTarget: Identifiable {
     }
 }
 
+struct RemoteBranchDeleteTarget: Identifiable, Equatable {
+    let remote: String
+    let branch: String
+
+    var id: String { "\(remote)/\(branch)" }
+    var fullPath: String { id }
+}
+
 enum WorktreeCreationMode: String, CaseIterable {
     case existingBranch = "Existing Branch"
     case newBranch = "New Branch"
@@ -134,6 +142,7 @@ struct SidebarView: View {
     let isBranchSyncing: (String) -> Bool
     let onRequestCheckout: (String, Bool) -> Void
     let onRequestFetchBranch: (String) -> Void
+    let onRequestPullRemoteBranch: (String, String) -> Void
     let onRequestPullTracked: (String) -> Void
     let onRequestPushToTracked: (String) -> Void
     let onRequestRenameBranch: (String) -> Void
@@ -144,6 +153,7 @@ struct SidebarView: View {
     let onRequestMergeBranchIntoCurrent: (String) -> Void
     let onRequestPushBranchToRemote: (String, String) -> Void
     let onRequestTrackRemoteBranch: (String, String?) -> Void
+    let onRequestCreatePullRequestForRemote: (String, String) -> Void
     let onRequestApplyStash: (String) -> Void
     let onRequestDeleteStash: (String) -> Void
     let onRequestOpenWorktree: (URL) -> Void
@@ -211,6 +221,7 @@ struct SidebarView: View {
     @State private var errorMessage = ""
     @State private var showingError = false
     @State private var deleteConfirmationTarget: DeleteConfirmationTarget?
+    @State private var remoteBranchDeleteTarget: RemoteBranchDeleteTarget?
     @State private var forceDeleteBranch = false
     @State private var activeDropTarget: GitDragTarget?
     @State private var activeDropLabel: String?
@@ -225,6 +236,7 @@ struct SidebarView: View {
         isBranchSyncing: @escaping (String) -> Bool = { _ in false },
         onRequestCheckout: @escaping (String, Bool) -> Void,
         onRequestFetchBranch: @escaping (String) -> Void,
+        onRequestPullRemoteBranch: @escaping (String, String) -> Void = { _, _ in },
         onRequestPullTracked: @escaping (String) -> Void = { _ in },
         onRequestPushToTracked: @escaping (String) -> Void = { _ in },
         onRequestRenameBranch: @escaping (String) -> Void = { _ in },
@@ -235,6 +247,7 @@ struct SidebarView: View {
         onRequestMergeBranchIntoCurrent: @escaping (String) -> Void = { _ in },
         onRequestPushBranchToRemote: @escaping (String, String) -> Void = { _, _ in },
         onRequestTrackRemoteBranch: @escaping (String, String?) -> Void = { _, _ in },
+        onRequestCreatePullRequestForRemote: @escaping (String, String) -> Void = { _, _ in },
         onRequestApplyStash: @escaping (String) -> Void = { _ in },
         onRequestDeleteStash: @escaping (String) -> Void = { _ in },
         onRequestOpenWorktree: @escaping (URL) -> Void = { _ in },
@@ -249,6 +262,7 @@ struct SidebarView: View {
         self.isBranchSyncing = isBranchSyncing
         self.onRequestCheckout = onRequestCheckout
         self.onRequestFetchBranch = onRequestFetchBranch
+        self.onRequestPullRemoteBranch = onRequestPullRemoteBranch
         self.onRequestPullTracked = onRequestPullTracked
         self.onRequestPushToTracked = onRequestPushToTracked
         self.onRequestRenameBranch = onRequestRenameBranch
@@ -259,6 +273,7 @@ struct SidebarView: View {
         self.onRequestMergeBranchIntoCurrent = onRequestMergeBranchIntoCurrent
         self.onRequestPushBranchToRemote = onRequestPushBranchToRemote
         self.onRequestTrackRemoteBranch = onRequestTrackRemoteBranch
+        self.onRequestCreatePullRequestForRemote = onRequestCreatePullRequestForRemote
         self.onRequestApplyStash = onRequestApplyStash
         self.onRequestDeleteStash = onRequestDeleteStash
         self.onRequestOpenWorktree = onRequestOpenWorktree
@@ -442,6 +457,23 @@ struct SidebarView: View {
                 case .prefix(let prefix):
                     deletePrefixConfirmationSheet(for: prefix)
                 }
+            }
+            .alert("Delete Remote Branch", isPresented: Binding(
+                get: { remoteBranchDeleteTarget != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        remoteBranchDeleteTarget = nil
+                    }
+                }
+            )) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    if let target = remoteBranchDeleteTarget {
+                        Task { await deleteRemoteBranch(target) }
+                    }
+                }
+            } message: {
+                Text("Delete '\(remoteBranchDeleteTarget?.fullPath ?? "")' from the remote?")
             }
             .alert("Remove Worktree", isPresented: $showingWorktreeRemovalConfirmation) {
                 Button("Cancel", role: .cancel) {}
@@ -1154,11 +1186,14 @@ struct SidebarView: View {
                 .onTapGesture {
                     selection = .remoteBranch(row.fullPath)
                 }
-                .contextMenu {
-                    Button("Copy Branch Name to Clipboard") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(row.fullPath, forType: .string)
+                .onTapGesture(count: 2) {
+                    selection = .remoteBranch(row.fullPath)
+                    Task {
+                        await checkoutRemoteBranch(row.fullPath)
                     }
+                }
+                .contextMenu {
+                    remoteBranchContextMenu(for: row.fullPath)
                 }
         }
     }
@@ -1220,6 +1255,133 @@ struct SidebarView: View {
         } else {
             expandedRemoteFolders.insert(path)
         }
+    }
+
+    @ViewBuilder
+    private func remoteBranchContextMenu(for fullPath: String) -> some View {
+        if let remoteBranch = remoteBranchParts(from: fullPath) {
+            Button("Checkout...") {
+                selection = .remoteBranch(fullPath)
+                Task { await checkoutRemoteBranch(fullPath) }
+            }
+            .disabled(remoteBranch.branch == "HEAD")
+
+            let pullTarget = currentBranch.isEmpty ? "current branch" : currentBranch
+            Button("Pull \(fullPath) into \(pullTarget)") {
+                onRequestPullRemoteBranch(remoteBranch.remote, remoteBranch.branch)
+            }
+            .disabled(currentBranch.isEmpty || remoteBranch.branch == "HEAD")
+
+            Divider()
+
+            Button("Copy Branch Name to Clipboard") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(fullPath, forType: .string)
+            }
+
+            Button("Diff Against Current") {}
+                .disabled(true)
+
+            Divider()
+
+            Button("Delete...", role: .destructive) {
+                remoteBranchDeleteTarget = RemoteBranchDeleteTarget(
+                    remote: remoteBranch.remote,
+                    branch: remoteBranch.branch
+                )
+            }
+            .disabled(remoteBranch.branch == "HEAD")
+
+            Divider()
+
+            Button("Create Pull Request...") {
+                onRequestCreatePullRequestForRemote(remoteBranch.remote, remoteBranch.branch)
+            }
+            .disabled(remoteBranch.branch == "HEAD")
+        } else {
+            Button("Copy Branch Name to Clipboard") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(fullPath, forType: .string)
+            }
+        }
+    }
+
+    private func checkoutRemoteBranch(_ fullPath: String) async {
+        guard let remoteBranch = remoteBranchParts(from: fullPath) else {
+            await MainActor.run {
+                errorMessage = "Could not parse remote branch '\(fullPath)'."
+                showingError = true
+            }
+            return
+        }
+
+        do {
+            let localBranch = try await GitStatusService.shared.checkoutRemoteBranch(
+                remote: remoteBranch.remote,
+                branch: remoteBranch.branch,
+                in: repositoryURL
+            )
+            expandBranchesSection()
+            await loadBranches(force: true)
+            await loadRemotes()
+            await MainActor.run {
+                selection = .branch(localBranch)
+            }
+            NotificationCenter.default.post(
+                name: .repositoryDidChange,
+                object: nil,
+                userInfo: ["repositoryURL": repositoryURL]
+            )
+        } catch {
+            await MainActor.run {
+                errorMessage = error.localizedDescription
+                showingError = true
+            }
+        }
+    }
+
+    private func deleteRemoteBranch(_ target: RemoteBranchDeleteTarget) async {
+        do {
+            _ = try await GitStatusService.shared.deleteRemoteBranch(
+                remote: target.remote,
+                name: target.branch,
+                in: repositoryURL
+            )
+            await loadRemotes()
+            await MainActor.run {
+                remoteBranchDeleteTarget = nil
+                if selection == .remoteBranch(target.fullPath) {
+                    selection = .item(.history)
+                }
+            }
+            NotificationCenter.default.post(
+                name: .repositoryDidChange,
+                object: nil,
+                userInfo: ["repositoryURL": repositoryURL]
+            )
+        } catch {
+            await MainActor.run {
+                remoteBranchDeleteTarget = nil
+                errorMessage = error.localizedDescription
+                showingError = true
+            }
+        }
+    }
+
+    @MainActor
+    private func expandBranchesSection() {
+        guard !sectionStates.branchesExpanded else { return }
+        sectionStates.branchesExpanded = true
+        SidebarSettingsStore.shared.update(for: repositoryURL.path, state: sectionStates)
+    }
+
+    private func remoteBranchParts(from fullPath: String) -> (remote: String, branch: String)? {
+        let parts = fullPath.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2 else { return nil }
+        let remote = String(parts[0])
+        let branch = String(parts[1])
+        guard !remote.isEmpty, !branch.isEmpty else { return nil }
+        return (remote, branch)
     }
 
     @ViewBuilder
