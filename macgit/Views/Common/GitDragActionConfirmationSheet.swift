@@ -65,24 +65,19 @@ struct GitDragActionConfirmationSheet: View {
                 .font(.system(size: 13))
                 .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Target branch")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                Text(targetBranchName)
-                    .font(.system(size: 13, weight: .medium))
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.quaternary.opacity(0.2))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            }
-
             if let operation = selectedBranchOperation, let sourceBranchName {
                 branchOperationContent(sourceBranchName: sourceBranchName, operation: operation)
             } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Target branch")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    branchNamePill(targetBranchName)
+                }
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Commits")
-                        .font(.system(size: 12))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
 
                     ScrollView {
@@ -124,38 +119,62 @@ struct GitDragActionConfirmationSheet: View {
         operation: Binding<GitDragBranchOperation>
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Source branch")
-                    .font(.system(size: 12))
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Branches")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(sourceBranchName)
-                    .font(.system(size: 13, weight: .medium))
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.quaternary.opacity(0.2))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                HStack(alignment: .center, spacing: 10) {
+                    branchEndpoint(title: "Source", branchName: sourceBranchName)
+                    Image(systemName: "arrow.right")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    branchEndpoint(title: "Target", branchName: targetBranchName)
+                }
+                .padding(12)
+                .background(.quaternary.opacity(0.18))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Operation")
-                    .font(.system(size: 12))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Picker("Operation", selection: operation) {
-                    Text("Merge").tag(GitDragBranchOperation.merge)
-                    Text("Rebase").tag(GitDragBranchOperation.rebase)
+                Picker("", selection: operation) {
+                    Text("Merge \(sourceBranchName) into \(targetBranchName)")
+                        .tag(GitDragBranchOperation.merge)
+                    Text("Rebase \(targetBranchName) onto \(sourceBranchName)")
+                        .tag(GitDragBranchOperation.rebase)
                 }
-                .pickerStyle(.segmented)
-
-                Text(
-                    operation.wrappedValue == .merge
-                        ? "Merge \(sourceBranchName) into \(targetBranchName)"
-                        : "Rebase \(targetBranchName) onto \(sourceBranchName)"
-                )
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
+                .pickerStyle(.radioGroup)
+                .labelsHidden()
             }
         }
+    }
+
+    private func branchEndpoint(title: String, branchName: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            branchNamePill(branchName)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func branchNamePill(_ branchName: String) -> some View {
+        Text(branchName)
+            .font(.subheadline.bold())
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.25))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 }
 
