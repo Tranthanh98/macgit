@@ -42,6 +42,16 @@ private struct PendingBranchDropConfirmation: Identifiable, Equatable {
     var operation: GitDragBranchOperation
 }
 
+private struct PendingPushBranchDropConfirmation: Identifiable, Equatable {
+    let id = UUID()
+    let branch: String
+    let remote: String
+
+    var remoteBranch: String {
+        "\(remote)/\(branch)"
+    }
+}
+
 private struct BranchTagStartPoint: Equatable {
     let branchName: String
     let hash: String
@@ -92,6 +102,7 @@ struct MainWindowView: View {
     @State private var pendingConfirmedUndo: (entry: GitUndoEntry, action: GitUndoMenuAction)?
     @State private var pendingCommitDropConfirmation: PendingCommitDropConfirmation?
     @State private var pendingBranchDropConfirmation: PendingBranchDropConfirmation?
+    @State private var pendingPushBranchDropConfirmation: PendingPushBranchDropConfirmation?
     @State private var isPerformingBranchDropOperation = false
 
     var body: some View {
@@ -157,6 +168,31 @@ struct MainWindowView: View {
             }
             .sheet(item: $pendingBranchDropConfirmation) { confirmation in
                 branchDropConfirmationSheet(for: confirmation)
+            }
+            .confirmationDialog(
+                "Push Branch",
+                isPresented: Binding(
+                    get: { pendingPushBranchDropConfirmation != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            pendingPushBranchDropConfirmation = nil
+                        }
+                    }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Push") {
+                    guard let confirmation = pendingPushBranchDropConfirmation else { return }
+                    pendingPushBranchDropConfirmation = nil
+                    Task {
+                        await performConfirmedBranchPush(confirmation)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                if let confirmation = pendingPushBranchDropConfirmation {
+                    Text("Push \"\(confirmation.branch)\" to remote branch \"\(confirmation.remoteBranch)\"?")
+                }
             }
             .sheet(isPresented: $showingRenameBranchSheet) { renameSheet }
             .sheet(isPresented: $showingCheckoutConfirmation) {
@@ -1389,6 +1425,10 @@ struct MainWindowView: View {
             Task {
                 await presentTagSheetFromBranchTip(sourceBranch)
             }
+        case .pushBranchToRemote(let branch):
+            Task {
+                await presentPushBranchDropConfirmation(branch)
+            }
         case .stashFiles, .applyStash:
             syncState.showInfo("That drag and drop action is not available in Phase 1 yet.")
         }
@@ -1426,6 +1466,35 @@ struct MainWindowView: View {
     private func presentBranchSheet(startPoint: GitBranchStartPoint?) {
         branchSheetStartPoint = startPoint
         showingBranchSheet = true
+    }
+
+    private func presentPushBranchDropConfirmation(_ branch: String) async {
+        let remotes = await GitStatusService.shared.remotes(in: repositoryURL)
+        await MainActor.run {
+            guard let remote = remotes.first(where: { $0 == "origin" }) ?? remotes.first else {
+                syncState.showError("No remotes configured.")
+                return
+            }
+
+            pendingPushBranchDropConfirmation = PendingPushBranchDropConfirmation(
+                branch: branch,
+                remote: remote
+            )
+        }
+    }
+
+    private func performConfirmedBranchPush(_ confirmation: PendingPushBranchDropConfirmation) async {
+        let options = GitStatusService.PushOptions(
+            remote: confirmation.remote,
+            branches: [confirmation.branch],
+            branchMappings: [confirmation.branch: confirmation.branch]
+        )
+
+        await syncState.performPush(
+            options: options,
+            repositoryURL: repositoryURL,
+            undoManager: undoManager
+        )
     }
 
     private func presentTagSheetFromBranchTip(_ sourceBranch: String) async {

@@ -357,7 +357,7 @@ struct SidebarView: View {
                 }
 
                 Section {
-                    sectionHeader(.remotes, isExpanded: sectionStates.remotesExpanded)
+                    remotesSectionHeaderRow
 
                     if sectionStates.remotesExpanded {
                         if isLoadingRemotes && remoteNodes.isEmpty {
@@ -547,6 +547,35 @@ struct SidebarView: View {
             }
     }
 
+    private var remotesSectionHeaderRow: some View {
+        sectionHeaderContent(.remotes, isExpanded: sectionStates.remotesExpanded)
+            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(activeDropTarget == .remotesHeader ? Color.accentColor.opacity(0.12) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay {
+                SidebarBranchDropTarget(
+                    onTap: { toggleSection(.remotes) },
+                    onTargetedChange: updateRemotesHeaderDropTarget,
+                    fallbackPayload: { activeBranchDragPayload ?? GitDragPayloadStore.currentPayload() },
+                    dragPayload: { nil },
+                    dragTitle: { "" },
+                    onDragEnded: { _ in },
+                    onDrop: { payload in
+                        activeBranchDragPayload = nil
+                        GitDragPayloadStore.clear(ifMatching: payload)
+                        handleDrop([payload], target: .remotesHeader)
+                        return true
+                    }
+                )
+                .onDrop(of: [.macgitGitDragPayload], isTargeted: nil) { providers in
+                    activeBranchDragPayload = nil
+                    GitDragPayloadStore.clear()
+                    return handleDrop(providers, target: .remotesHeader)
+                }
+            }
+    }
+
     @ViewBuilder
     private func sectionHeader(_ section: SidebarSection, isExpanded: Bool) -> some View {
         sectionHeaderContent(section, isExpanded: isExpanded)
@@ -558,6 +587,7 @@ struct SidebarView: View {
     private func sectionHeaderContent(_ section: SidebarSection, isExpanded: Bool) -> some View {
         let isDropActive = (section == .branches && activeDropTarget == .branchesHeader)
             || (section == .tags && activeDropTarget == .tagsHeader)
+            || (section == .remotes && activeDropTarget == .remotesHeader)
 
         HStack {
             Text(section.rawValue)
@@ -633,6 +663,15 @@ struct SidebarView: View {
             activeDropTarget = .tagsHeader
             activeDropLabel = "Create Tag"
         } else if activeDropTarget == .tagsHeader {
+            clearDropHover()
+        }
+    }
+
+    private func updateRemotesHeaderDropTarget(isTargeted: Bool) {
+        if isTargeted {
+            activeDropTarget = .remotesHeader
+            activeDropLabel = "Push Branch"
+        } else if activeDropTarget == .remotesHeader {
             clearDropHover()
         }
     }

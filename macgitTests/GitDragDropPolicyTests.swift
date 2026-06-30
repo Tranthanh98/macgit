@@ -316,6 +316,26 @@ final class GitDragDropPolicyTests: XCTestCase {
         )
     }
 
+    func testBranchCanRequestPushConfirmationFromRemotesHeader() {
+        XCTAssertEqual(
+            decision(
+                payload: .branch("feature", repositoryURL: repoURL),
+                target: .remotesHeader
+            ),
+            .accept(.pushBranchToRemote("feature"))
+        )
+    }
+
+    func testCommitDropOnRemotesHeaderIsRejected() {
+        XCTAssertEqual(
+            decision(
+                commits: [GitDraggedCommit(hash: "c1", message: "one", isMerge: false)],
+                target: .remotesHeader
+            ),
+            .reject("Drop a branch onto Remotes to push it.")
+        )
+    }
+
     private func decision(
         commits: [GitDraggedCommit],
         target: GitDragTarget = .localBranch(name: "main", isCurrent: true),
