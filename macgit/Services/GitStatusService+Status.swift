@@ -47,12 +47,6 @@ extension GitStatusService {
                 }
             }
 
-            // Skip non-previewable binary files (but keep images)
-            let tempFile = StatusFile(path: path, status: .modified, originalPath: originalPath)
-            if tempFile.isBinary && !tempFile.isImage {
-                continue
-            }
-
             let indexChar = Character(String(indexStatus))
             let worktreeChar = Character(String(worktreeStatus))
 
