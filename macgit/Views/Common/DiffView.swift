@@ -145,14 +145,12 @@ struct DiffView: View {
 
     private func imageDisplayView(_ nsImage: NSImage) -> some View {
         GeometryReader { geo in
-            ScrollView([.horizontal, .vertical]) {
+            ScrollView(.vertical) {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(
-                        maxWidth: max(geo.size.width, CGFloat(nsImage.size.width)),
-                        maxHeight: max(geo.size.height, CGFloat(nsImage.size.height))
-                    )
+                    .frame(width: geo.size.width, alignment: .top)
+                    .clipped()
             }
         }
     }

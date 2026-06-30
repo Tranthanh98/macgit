@@ -791,12 +791,12 @@ struct FileStatusView: View {
         return Group {
             if let nsImage = NSImage(contentsOf: fileURL) {
                 GeometryReader { geo in
-                    ScrollView([.horizontal, .vertical]) {
+                    ScrollView(.vertical) {
                         Image(nsImage: nsImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: max(geo.size.width, CGFloat(nsImage.size.width)),
-                                   maxHeight: max(geo.size.height, CGFloat(nsImage.size.height)))
+                            .frame(width: geo.size.width, alignment: .top)
+                            .clipped()
                     }
                 }
             } else {
