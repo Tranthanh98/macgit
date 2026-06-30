@@ -63,6 +63,9 @@ enum GitDragDropPolicy {
             }
             return .accept(.createBranch(startPoint: .commit(hash: commit.hash, message: commit.message)))
 
+        case .tagsHeader:
+            return .reject("Drop a branch onto Tags to create a tag.")
+
         case .stashesHeader, .fileStatus:
             return .reject("That drag and drop action is not available yet.")
         }
@@ -91,6 +94,9 @@ enum GitDragDropPolicy {
 
         case .branchesHeader:
             return .accept(.createBranch(startPoint: .branch(source)))
+
+        case .tagsHeader:
+            return .accept(.createTagFromBranch(source))
 
         case .stashesHeader, .fileStatus:
             return .reject("That drag and drop action is not available yet.")

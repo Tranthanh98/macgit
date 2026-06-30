@@ -1385,6 +1385,10 @@ struct MainWindowView: View {
             )
         case .createBranch(let startPoint):
             presentCreateBranchSheet(startPoint: startPoint)
+        case .createTagFromBranch(let sourceBranch):
+            Task {
+                await presentTagSheetFromBranchTip(sourceBranch)
+            }
         case .stashFiles, .applyStash:
             syncState.showInfo("That drag and drop action is not available in Phase 1 yet.")
         }

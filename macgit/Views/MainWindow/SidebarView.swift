@@ -336,6 +336,8 @@ struct SidebarView: View {
                 }
 
                 Section {
+                    tagsSectionHeaderRow
+
                     if sectionStates.tagsExpanded {
                         if isLoadingTags && tagNodes.isEmpty {
                             ProgressView()
@@ -352,8 +354,6 @@ struct SidebarView: View {
                             }
                         }
                     }
-                } header: {
-                    sectionHeader(.tags, isExpanded: sectionStates.tagsExpanded)
                 }
 
                 Section {
@@ -518,6 +518,35 @@ struct SidebarView: View {
             }
     }
 
+    private var tagsSectionHeaderRow: some View {
+        sectionHeaderContent(.tags, isExpanded: sectionStates.tagsExpanded)
+            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(activeDropTarget == .tagsHeader ? Color.accentColor.opacity(0.12) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay {
+                SidebarBranchDropTarget(
+                    onTap: { toggleSection(.tags) },
+                    onTargetedChange: updateTagsHeaderDropTarget,
+                    fallbackPayload: { activeBranchDragPayload ?? GitDragPayloadStore.currentPayload() },
+                    dragPayload: { nil },
+                    dragTitle: { "" },
+                    onDragEnded: { _ in },
+                    onDrop: { payload in
+                        activeBranchDragPayload = nil
+                        GitDragPayloadStore.clear(ifMatching: payload)
+                        handleDrop([payload], target: .tagsHeader)
+                        return true
+                    }
+                )
+                .onDrop(of: [.macgitGitDragPayload], isTargeted: nil) { providers in
+                    activeBranchDragPayload = nil
+                    GitDragPayloadStore.clear()
+                    return handleDrop(providers, target: .tagsHeader)
+                }
+            }
+    }
+
     @ViewBuilder
     private func sectionHeader(_ section: SidebarSection, isExpanded: Bool) -> some View {
         sectionHeaderContent(section, isExpanded: isExpanded)
@@ -525,14 +554,15 @@ struct SidebarView: View {
 
     @ViewBuilder
     private func sectionHeaderContent(_ section: SidebarSection, isExpanded: Bool) -> some View {
-        let isBranchesDropActive = section == .branches && activeDropTarget == .branchesHeader
+        let isDropActive = (section == .branches && activeDropTarget == .branchesHeader)
+            || (section == .tags && activeDropTarget == .tagsHeader)
 
         HStack {
             Text(section.rawValue)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
             Spacer()
-            if isBranchesDropActive, let activeDropLabel {
+            if isDropActive, let activeDropLabel {
                 Text(activeDropLabel)
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(Color.accentColor)
@@ -592,6 +622,15 @@ struct SidebarView: View {
             activeDropTarget = .branchesHeader
             activeDropLabel = "Create Branch"
         } else if activeDropTarget == .branchesHeader {
+            clearDropHover()
+        }
+    }
+
+    private func updateTagsHeaderDropTarget(isTargeted: Bool) {
+        if isTargeted {
+            activeDropTarget = .tagsHeader
+            activeDropLabel = "Create Tag"
+        } else if activeDropTarget == .tagsHeader {
             clearDropHover()
         }
     }

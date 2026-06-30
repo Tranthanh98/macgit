@@ -134,6 +134,7 @@ extension GitDragPayload.Content {
 nonisolated enum GitDragTarget: Equatable, Sendable {
     case localBranch(name: String, isCurrent: Bool)
     case branchesHeader
+    case tagsHeader
     case stashesHeader
     case fileStatus
 }
@@ -151,6 +152,7 @@ nonisolated enum GitDragBranchOperation: Equatable, Sendable {
 nonisolated enum GitDragDropRequest: Equatable, Sendable {
     case cherryPick(commits: [GitDraggedCommit], targetBranch: String)
     case createBranch(startPoint: GitBranchStartPoint)
+    case createTagFromBranch(String)
     case branchOperation(source: String, target: String, operation: GitDragBranchOperation)
     case stashFiles(paths: [String])
     case applyStash(ref: String)

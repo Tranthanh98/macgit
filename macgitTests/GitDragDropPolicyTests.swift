@@ -296,6 +296,26 @@ final class GitDragDropPolicyTests: XCTestCase {
         )
     }
 
+    func testBranchCanCreateTagFromTagsHeader() {
+        XCTAssertEqual(
+            decision(
+                payload: .branch("feature", repositoryURL: repoURL),
+                target: .tagsHeader
+            ),
+            .accept(.createTagFromBranch("feature"))
+        )
+    }
+
+    func testCommitDropOnTagsHeaderIsRejected() {
+        XCTAssertEqual(
+            decision(
+                commits: [GitDraggedCommit(hash: "c1", message: "one", isMerge: false)],
+                target: .tagsHeader
+            ),
+            .reject("Drop a branch onto Tags to create a tag.")
+        )
+    }
+
     private func decision(
         commits: [GitDraggedCommit],
         target: GitDragTarget = .localBranch(name: "main", isCurrent: true),
