@@ -111,6 +111,22 @@ final class GitDragDropPolicyTests: XCTestCase {
         XCTAssertEqual(loadedPayload, payload)
     }
 
+    func testDragPayloadStoreClearsOnlyMatchingPayload() {
+        let payload = GitDragPayload.commits(
+            [GitDraggedCommit(hash: "c1", message: "commit", isMerge: false)],
+            repositoryURL: repoURL
+        )
+        let otherPayload = GitDragPayload.branch("feature", repositoryURL: repoURL)
+
+        GitDragPayloadStore.clear()
+        GitDragPayloadStore.set(payload)
+        GitDragPayloadStore.clear(ifMatching: otherPayload)
+        XCTAssertEqual(GitDragPayloadStore.currentPayload(), payload)
+
+        GitDragPayloadStore.clear(ifMatching: payload)
+        XCTAssertNil(GitDragPayloadStore.currentPayload())
+    }
+
     func testRepositoryMismatchIsRejected() {
         let payload = GitDragPayload.commits(
             [GitDraggedCommit(hash: "c1", message: "commit", isMerge: false)],

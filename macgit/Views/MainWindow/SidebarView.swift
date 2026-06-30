@@ -493,15 +493,17 @@ struct SidebarView: View {
                 SidebarBranchDropTarget(
                     onTap: { toggleSection(.branches) },
                     onTargetedChange: updateBranchesHeaderDropTarget,
-                    fallbackPayload: { activeBranchDragPayload },
+                    fallbackPayload: { activeBranchDragPayload ?? GitDragPayloadStore.currentPayload() },
                     onDrop: { payload in
                         activeBranchDragPayload = nil
+                        GitDragPayloadStore.clear(ifMatching: payload)
                         handleDrop([payload], target: .branchesHeader)
                         return true
                     }
                 )
                 .onDrop(of: [.macgitGitDragPayload], isTargeted: nil) { providers in
                     activeBranchDragPayload = nil
+                    GitDragPayloadStore.clear()
                     return handleDrop(providers, target: .branchesHeader)
                 }
             }
@@ -585,15 +587,8 @@ struct SidebarView: View {
         }
     }
 
-    private func updateCurrentBranchDropTarget(session: DropSession) {
-        switch session.phase {
-        case .entering, .active:
-            isCurrentBranchDropTargeted = true
-        case .exiting, .dataTransferCompleted, .ended:
-            isCurrentBranchDropTargeted = false
-        @unknown default:
-            isCurrentBranchDropTargeted = false
-        }
+    private func updateCurrentBranchDropTarget(isTargeted: Bool) {
+        isCurrentBranchDropTargeted = isTargeted
     }
 
     private func makeBranchItemProvider(branchName: String) -> NSItemProvider {
@@ -602,6 +597,7 @@ struct SidebarView: View {
             repositoryURL: repositoryURL
         )
         activeBranchDragPayload = payload
+        GitDragPayloadStore.set(payload)
 
         let provider = NSItemProvider()
         if let data = try? GitDragPayload.encodeTransferData(payload) {
@@ -863,13 +859,29 @@ struct SidebarView: View {
                     BranchDragPreview(branchName: row.fullPath)
                 }
 
-            if isCurrentBranch {
+        if isCurrentBranch {
                 rowView
-                    .onDropSessionUpdated { session in
-                        updateCurrentBranchDropTarget(session: session)
+                    .overlay {
+                        SidebarBranchDropTarget(
+                            onTap: { selection = .branch(row.fullPath) },
+                            onTargetedChange: updateCurrentBranchDropTarget,
+                            fallbackPayload: { activeBranchDragPayload ?? GitDragPayloadStore.currentPayload() },
+                            onDrop: { payload in
+                                activeBranchDragPayload = nil
+                                GitDragPayloadStore.clear(ifMatching: payload)
+                                handleDrop(
+                                    [payload],
+                                    target: branchTarget,
+                                    optionKeyPressed: NSEvent.modifierFlags.contains(.option)
+                                )
+                                return true
+                            }
+                        )
                     }
                     .onDrop(of: [.macgitGitDragPayload], isTargeted: nil) { providers in
-                        handleDrop(
+                        activeBranchDragPayload = nil
+                        GitDragPayloadStore.clear()
+                        return handleDrop(
                             providers,
                             target: branchTarget,
                             optionKeyPressed: NSEvent.modifierFlags.contains(.option)
@@ -882,6 +894,14 @@ struct SidebarView: View {
     }
 
     private func currentBranchDropLabel() -> String {
+        let activePayload = activeBranchDragPayload ?? GitDragPayloadStore.currentPayload()
+        if case .commits = activePayload?.content {
+            return "Cherry-pick"
+        }
+        if case .branch = activePayload?.content {
+            return NSEvent.modifierFlags.contains(.option) ? "Rebase" : "Merge"
+        }
+
         if NSEvent.modifierFlags.contains(.option) {
             return "Rebase or Cherry-pick"
         }

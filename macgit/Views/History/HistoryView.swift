@@ -20,7 +20,9 @@
 //  You should have received a copy of the GNU Affero General Public License
 //  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 //
+import CoreTransferable
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct HistoryView: View {
     let repositoryURL: URL
@@ -538,6 +540,10 @@ struct HistoryView: View {
                                                 selection: commitSelection
                                             )
                                             let draggedHashes = Set(draggedCommits.map(\.hash))
+                                            let draggedPayload = GitDragPayload.commits(
+                                                draggedCommits,
+                                                repositoryURL: repositoryURL
+                                            )
 
                                             CommitRowView(
                                                 commit: commit,
@@ -570,12 +576,9 @@ struct HistoryView: View {
                                             .contextMenu {
                                                 commitContextMenu(for: commit)
                                             }
-                                            .draggable(
-                                                GitDragPayload.commits(
-                                                    draggedCommits,
-                                                    repositoryURL: repositoryURL
-                                                )
-                                            ) {
+                                            .onDrag {
+                                                makeCommitItemProvider(payload: draggedPayload)
+                                            } preview: {
                                                 CommitDragPreview(
                                                     presentation: CommitDragPreviewPresentation(
                                                         commit: commit,
@@ -584,7 +587,8 @@ struct HistoryView: View {
                                                     onDragStateChange: { isActive in
                                                         updateCommitDragState(
                                                             isActive: isActive,
-                                                            hashes: draggedHashes
+                                                            hashes: draggedHashes,
+                                                            payload: draggedPayload
                                                         )
                                                     }
                                                 )
@@ -1429,11 +1433,33 @@ struct HistoryView: View {
             }
     }
 
-    private func updateCommitDragState(isActive: Bool, hashes: Set<String>) {
+    private func makeCommitItemProvider(payload: GitDragPayload) -> NSItemProvider {
+        GitDragPayloadStore.set(payload)
+
+        let provider = NSItemProvider()
+        if let data = try? GitDragPayload.encodeTransferData(payload) {
+            provider.registerDataRepresentation(
+                forTypeIdentifier: UTType.macgitGitDragPayload.identifier,
+                visibility: .all
+            ) { completionHandler in
+                completionHandler(data, nil)
+                return nil
+            }
+        }
+        provider.register(payload)
+        return provider
+    }
+
+    private func updateCommitDragState(
+        isActive: Bool,
+        hashes: Set<String>,
+        payload: GitDragPayload
+    ) {
         if isActive {
             activeDragCommitHashes = hashes
         } else if activeDragCommitHashes == hashes {
             activeDragCommitHashes.removeAll()
+            GitDragPayloadStore.clear(ifMatching: payload)
         }
     }
 
