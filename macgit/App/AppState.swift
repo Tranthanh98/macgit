@@ -34,11 +34,19 @@ enum FileMenuAction: Equatable {
 
 final class AppState: ObservableObject {
     static let shared = AppState()
+    private static let showToolbarButtonTextKey = "showToolbarButtonText"
 
     @Published var fileMenuAction: FileMenuAction?
     @Published var openWindowWithCloneSheet = false
     @Published var newWindowRepoURL: URL?
     @Published var hasOpenRepository = false
+    @Published var showToolbarButtonText: Bool {
+        didSet {
+            UserDefaults.standard.set(showToolbarButtonText, forKey: Self.showToolbarButtonTextKey)
+        }
+    }
 
-    private init() {}
+    private init() {
+        showToolbarButtonText = UserDefaults.standard.object(forKey: Self.showToolbarButtonTextKey) as? Bool ?? true
+    }
 }

@@ -520,6 +520,7 @@ struct MainWindowView: View {
             toolbarButton(
                 icon: "arrow.uturn.backward",
                 label: "Undo",
+                showText: appState.showToolbarButtonText,
                 disabled: GitUndoToolbarPolicy.isUndoDisabled(
                     isSyncing: syncState.isAnySyncing,
                     canUndo: undoManager.canUndo
@@ -528,16 +529,16 @@ struct MainWindowView: View {
             )
         }
         ToolbarItem(placement: .automatic) {
-            toolbarButton(icon: "network", label: "Remote", disabled: remoteURLString.isEmpty, action: { openRemoteURL() })
+            toolbarButton(icon: "network", label: "Remote", showText: appState.showToolbarButtonText, disabled: remoteURLString.isEmpty, action: { openRemoteURL() })
         }
         ToolbarItem(placement: .automatic) {
-            toolbarButton(icon: "folder", label: "Finder", action: showInFinder)
+            toolbarButton(icon: "folder", label: "Finder", showText: appState.showToolbarButtonText, action: showInFinder)
         }
         ToolbarItem(placement: .automatic) {
-            toolbarButton(icon: "terminal", label: "Terminal", action: openTerminal)
+            toolbarButton(icon: "terminal", label: "Terminal", showText: appState.showToolbarButtonText, action: openTerminal)
         }
         ToolbarItem(placement: .automatic) {
-            toolbarButton(icon: "gear", label: "Settings", action: { showingRepositorySettings = true })
+            toolbarButton(icon: "gear", label: "Settings", showText: appState.showToolbarButtonText, action: { showingRepositorySettings = true })
         }
     }
 
@@ -812,27 +813,28 @@ struct MainWindowView: View {
     @ViewBuilder
     private var leftToolbar: some View {
         let syncing = syncState.isAnySyncing
+        let showText = appState.showToolbarButtonText
         if windowWidth > 1000 {
             HStack(spacing: 2) {
-                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing || syncState.stagedBadgeCount == 0, action: { showCommitSheetIfNoConflicts() })
-                BadgeToolbarButton(icon: "arrow.down.to.line", label: "Pull", badgeCount: syncState.pullBadgeCount, isLoading: syncState.isPulling, disabled: syncing, action: { showingPullSheet = true })
-                BadgeToolbarButton(icon: "arrow.up.to.line", label: "Push", badgeCount: syncState.pushBadgeCount, isLoading: syncState.isPushing, disabled: syncing, action: { showingPushSheet = true })
-                toolbarButton(icon: "arrow.down.circle", label: "Fetch", isLoading: syncState.isFetching, disabled: syncing, action: { showingFetchSheet = true })
-                toolbarButton(icon: "arrow.triangle.branch", label: "Branch", action: { presentBranchSheet(startPoint: nil) })
-                toolbarButton(icon: "arrow.triangle.merge", label: "Merge", isLoading: syncState.isMerging, disabled: syncing, action: { showingMergeSheet = true })
-                toolbarButton(icon: "archivebox", label: "Stash", isLoading: syncState.isStashing, disabled: syncing || syncState.stashableCount == 0, action: { showingStashSheet = true })
+                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing || syncState.stagedBadgeCount == 0, showText: showText, action: { showCommitSheetIfNoConflicts() })
+                BadgeToolbarButton(icon: "arrow.down.to.line", label: "Pull", badgeCount: syncState.pullBadgeCount, isLoading: syncState.isPulling, disabled: syncing, showText: showText, action: { showingPullSheet = true })
+                BadgeToolbarButton(icon: "arrow.up.to.line", label: "Push", badgeCount: syncState.pushBadgeCount, isLoading: syncState.isPushing, disabled: syncing, showText: showText, action: { showingPushSheet = true })
+                toolbarButton(icon: "arrow.down.circle", label: "Fetch", showText: showText, isLoading: syncState.isFetching, disabled: syncing, action: { showingFetchSheet = true })
+                toolbarButton(icon: "arrow.triangle.branch", label: "Branch", showText: showText, action: { presentBranchSheet(startPoint: nil) })
+                toolbarButton(icon: "arrow.triangle.merge", label: "Merge", showText: showText, isLoading: syncState.isMerging, disabled: syncing, action: { showingMergeSheet = true })
+                toolbarButton(icon: "archivebox", label: "Stash", showText: showText, isLoading: syncState.isStashing, disabled: syncing || syncState.stashableCount == 0, action: { showingStashSheet = true })
             }
         } else if windowWidth > 800 {
             HStack(spacing: 2) {
-                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing || syncState.stagedBadgeCount == 0, action: { showCommitSheetIfNoConflicts() })
-                BadgeToolbarButton(icon: "arrow.down.to.line", label: "Pull", badgeCount: syncState.pullBadgeCount, isLoading: syncState.isPulling, disabled: syncing, action: { showingPullSheet = true })
-                BadgeToolbarButton(icon: "arrow.up.to.line", label: "Push", badgeCount: syncState.pushBadgeCount, isLoading: syncState.isPushing, disabled: syncing, action: { showingPushSheet = true })
-                toolbarButton(icon: "arrow.down.circle", label: "Fetch", isLoading: syncState.isFetching, disabled: syncing, action: { showingFetchSheet = true })
+                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing || syncState.stagedBadgeCount == 0, showText: showText, action: { showCommitSheetIfNoConflicts() })
+                BadgeToolbarButton(icon: "arrow.down.to.line", label: "Pull", badgeCount: syncState.pullBadgeCount, isLoading: syncState.isPulling, disabled: syncing, showText: showText, action: { showingPullSheet = true })
+                BadgeToolbarButton(icon: "arrow.up.to.line", label: "Push", badgeCount: syncState.pushBadgeCount, isLoading: syncState.isPushing, disabled: syncing, showText: showText, action: { showingPushSheet = true })
+                toolbarButton(icon: "arrow.down.circle", label: "Fetch", showText: showText, isLoading: syncState.isFetching, disabled: syncing, action: { showingFetchSheet = true })
                 moreMenu
             }
         } else {
             HStack(spacing: 2) {
-                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing || syncState.stagedBadgeCount == 0, action: { showCommitSheetIfNoConflicts() })
+                BadgeToolbarButton(icon: "checkmark", label: "Commit", badgeCount: syncState.commitBadgeCount, isLoading: syncState.isCommitting, disabled: syncing || syncState.stagedBadgeCount == 0, showText: showText, action: { showCommitSheetIfNoConflicts() })
                 moreMenu
             }
         }
@@ -857,7 +859,7 @@ struct MainWindowView: View {
                     .disabled(syncing || syncState.stashableCount == 0)
             }
         } label: {
-            ToolbarButtonLabel(icon: "ellipsis", label: "More")
+            ToolbarButtonLabel(icon: "ellipsis", label: "More", showText: appState.showToolbarButtonText)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

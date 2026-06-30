@@ -28,6 +28,7 @@ struct BadgeToolbarButton: View {
     let badgeCount: Int
     let isLoading: Bool
     let disabled: Bool
+    var showText: Bool = true
     let action: () -> Void
 
     private var badgeText: String {
@@ -40,7 +41,7 @@ struct BadgeToolbarButton: View {
     var body: some View {
         Button(action: action) {
             ZStack(alignment: .topTrailing) {
-                ToolbarButtonLabel(icon: icon, label: label)
+                ToolbarButtonLabel(icon: icon, label: label, showText: showText)
                     .opacity(isLoading ? 0.3 : 1.0)
 
                 if badgeCount > 0 && !isLoading {

@@ -155,6 +155,11 @@ struct macgitApp: App {
                 .disabled(!appState.hasOpenRepository)
                 .keyboardShortcut("f", modifiers: [.command, .shift])
             }
+
+            CommandGroup(after: .toolbar) {
+                Toggle("Show Button Text", isOn: $appState.showToolbarButtonText)
+                    .keyboardShortcut("t", modifiers: [.command, .option])
+            }
         }
     }
 }
