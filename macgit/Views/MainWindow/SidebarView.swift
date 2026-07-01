@@ -713,6 +713,7 @@ struct SidebarView: View {
                         .foregroundStyle(.secondary)
                 }
                 .menuStyle(.borderlessButton)
+                .tint(Color(nsColor: .secondaryLabelColor))
                 .fixedSize()
                 .help("Worktree Actions")
             }
