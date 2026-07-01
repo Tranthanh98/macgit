@@ -42,6 +42,107 @@ final class GitStatusServiceStatusTests: XCTestCase {
         XCTAssertTrue(status.unstaged.contains { $0.path == "clip.mp4" }, "Modified tracked .mp4 file should appear in status")
     }
 
+    func testStatusCollapsesFinderMoveIntoRenamedEntry() async throws {
+        let repoURL = try makeTempRepo()
+        let oldURL = repoURL.appendingPathComponent("tracked.txt")
+        let newURL = repoURL.appendingPathComponent("subdir/tracked.txt")
+
+        try FileManager.default.createDirectory(
+            at: repoURL.appendingPathComponent("subdir"),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.moveItem(at: oldURL, to: newURL)
+
+        let status = try await GitStatusService.shared.status(for: repoURL)
+
+        XCTAssertTrue(status.unstaged.contains { $0.status == .renamed },
+                      "A file moved on disk should be reported as renamed")
+        let rename = try XCTUnwrap(status.unstaged.first { $0.status == .renamed })
+        XCTAssertEqual(rename.path, "subdir/tracked.txt")
+        XCTAssertEqual(rename.originalPath, "tracked.txt")
+        XCTAssertFalse(status.unstaged.contains { $0.status == .deleted && $0.path == "tracked.txt" },
+                       "Worktree deletion should be consumed by the rename pairing")
+        XCTAssertFalse(status.untracked.contains { $0.path == "subdir/tracked.txt" },
+                       "Untracked entry at the new path should be consumed by the rename pairing")
+    }
+
+    func testStatusReportsDeletedAndUntrackedSeparatelyWhenBasenamesDiffer() async throws {
+        let (staged, returnedUnstaged, returnedUntracked) = GitStatusService.pairWorktreeRenames(
+            staged: [],
+            unstaged: [
+                StatusFile(path: "old/photo.png", status: .deleted, originalPath: nil)
+            ],
+            untracked: [
+                StatusFile(path: "new/image.png", status: .untracked, originalPath: nil)
+            ]
+        )
+
+        XCTAssertTrue(staged.isEmpty)
+        XCTAssertEqual(returnedUnstaged.compactMap { $0.status == .deleted ? $0.path : nil },
+                       ["old/photo.png"],
+                       "Files with different basenames should not be paired")
+        XCTAssertEqual(returnedUntracked.map(\.path), ["new/image.png"])
+    }
+
+    func testStatusAfterStashApplyMoveSurfacesRenamedEntry() async throws {
+        let repoURL = try makeTempRepo()
+        let oldURL = repoURL.appendingPathComponent("tracked.txt")
+        let newURL = repoURL.appendingPathComponent("relocated/tracked.txt")
+        try FileManager.default.createDirectory(
+            at: repoURL.appendingPathComponent("relocated"),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.moveItem(at: oldURL, to: newURL)
+        try runGit(["add", "-A"], in: repoURL)
+        try runGit(["stash", "push", "-m", "move"], in: repoURL)
+
+        // After `git stash push` the working tree matches HEAD, so the
+        // relocated file is already gone. Applying the stash should put the
+        // rename back into the worktree as `A ` + ` D` (because Git loses
+        // the rename connection when re-applying onto a clean tree).
+        try runGit(["stash", "apply"], in: repoURL)
+
+        let status = try await GitStatusService.shared.status(for: repoURL)
+        XCTAssertTrue(status.unstaged.contains { $0.status == .renamed },
+                      "A stash-apply of a file move should be reported as renamed in the unstaged section")
+    }
+
+    func testPairWorktreeRenamesGroupsDAndUntrackedWithSameBasename() {
+        let deleted = StatusFile(path: "old/notes.md", status: .deleted, originalPath: nil)
+        let untracked = StatusFile(path: "new/notes.md", status: .untracked, originalPath: nil)
+        let modifiedKept = StatusFile(path: "other.txt", status: .modified, originalPath: nil)
+        let untrackedKept = StatusFile(path: "scratch.txt", status: .untracked, originalPath: nil)
+
+        let (_, unstaged, remaining) = GitStatusService.pairWorktreeRenames(
+            staged: [],
+            unstaged: [deleted, modifiedKept],
+            untracked: [untracked, untrackedKept]
+        )
+
+        XCTAssertEqual(unstaged.map(\.path), ["other.txt", "new/notes.md"])
+        XCTAssertEqual(unstaged.last?.status, .renamed)
+        XCTAssertEqual(unstaged.last?.originalPath, "old/notes.md")
+        XCTAssertEqual(remaining.map(\.path), ["scratch.txt"])
+    }
+
+    func testPairWorktreeRenamesGroupsDAndStagedAddedWithSameBasename() {
+        let deleted = StatusFile(path: "old/notes.md", status: .deleted, originalPath: nil)
+        let stagedAdded = StatusFile(path: "new/notes.md", status: .added, originalPath: nil)
+        let stagedKept = StatusFile(path: "staged.txt", status: .staged, originalPath: nil)
+
+        let (staged, unstaged, untracked) = GitStatusService.pairWorktreeRenames(
+            staged: [stagedAdded, stagedKept],
+            unstaged: [deleted],
+            untracked: []
+        )
+
+        XCTAssertEqual(staged.map(\.path), ["staged.txt"])
+        XCTAssertEqual(unstaged.map(\.path), ["new/notes.md"])
+        XCTAssertEqual(unstaged.last?.status, .renamed)
+        XCTAssertEqual(unstaged.last?.originalPath, "old/notes.md")
+        XCTAssertTrue(untracked.isEmpty)
+    }
+
     private func makeTempRepo() throws -> URL {
         let repoURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("macgit-status-binary-\(UUID().uuidString)", isDirectory: true)
