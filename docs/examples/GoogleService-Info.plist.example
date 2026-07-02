@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>API_KEY</key>
+	<string>nonfunctional-example-api-key</string>
+	<key>BUNDLE_ID</key>
+	<string>com.thanhtran.macgit</string>
+	<key>CLIENT_ID</key>
+	<string>000000000000-example.apps.googleusercontent.com</string>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:000000000000:ios:example</string>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true/>
+	<key>PROJECT_ID</key>
+	<string>example-project</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.000000000000-example</string>
+</dict>
+</plist>
