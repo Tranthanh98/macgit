@@ -356,6 +356,15 @@ struct FileStatusView: View {
             .padding(.vertical, 3)
             .padding(.horizontal, 2)
             .contentShape(Rectangle())
+            .onTapGesture(count: 2) {
+                Task {
+                    if isStaged {
+                        await unstage(file: file)
+                    } else {
+                        await stage(file: file)
+                    }
+                }
+            }
             .onTapGesture {
                 selectedFile = file
             }
@@ -427,7 +436,7 @@ struct FileStatusView: View {
             Divider()
 
             if isStaged {
-                Button(selection.title(for: .unstage)) {
+                Button(menuTitle(for: .unstage, selection: selection)) {
                     Task {
                         await unstage(files: selection.files(for: .unstage, fallback: file))
                     }
@@ -438,7 +447,7 @@ struct FileStatusView: View {
                     }
                 }
             } else {
-                Button(selection.title(for: .stage)) {
+                Button(menuTitle(for: .stage, selection: selection)) {
                     Task {
                         await stage(files: selection.files(for: .stage, fallback: file))
                     }
@@ -513,7 +522,7 @@ struct FileStatusView: View {
         Divider()
 
         if isStaged {
-            Button(selection.title(for: .unstage)) {
+            Button(menuTitle(for: .unstage, selection: selection)) {
                 Task {
                     await unstage(files: selection.files(for: .unstage, fallback: file))
                 }
@@ -524,7 +533,7 @@ struct FileStatusView: View {
                 }
             }
         } else {
-            Button(selection.title(for: .stage)) {
+            Button(menuTitle(for: .stage, selection: selection)) {
                 Task {
                     await stage(files: selection.files(for: .stage, fallback: file))
                 }
@@ -576,6 +585,16 @@ struct FileStatusView: View {
                 }
                 .disabled(selection.isSingleFileActionDisabled)
             }
+        }
+    }
+
+    private func menuTitle(for action: FileStatusSelectionAction, selection: FileStatusActionSelection) -> String {
+        let base = selection.title(for: action)
+        switch action {
+        case .stage, .unstage:
+            return "\(base) (double click)"
+        case .discard, .remove:
+            return base
         }
     }
 
