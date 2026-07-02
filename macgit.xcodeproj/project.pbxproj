@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		8A19F0F127AA100100A1B2C3 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 8A19F0F027AA100100A1B2C3 /* Sparkle */; };
+		8AFB000627B0000100A1B2C3 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 8AFB000327B0000100A1B2C3 /* FirebaseAuth */; };
+		8AFB000727B0000100A1B2C3 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 8AFB000427B0000100A1B2C3 /* FirebaseFirestore */; };
+		8AFB000827B0000100A1B2C3 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 8AFB000527B0000100A1B2C3 /* GoogleSignIn */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -43,6 +46,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8AFB000627B0000100A1B2C3 /* FirebaseAuth in Frameworks */,
+				8AFB000727B0000100A1B2C3 /* FirebaseFirestore in Frameworks */,
+				8AFB000827B0000100A1B2C3 /* GoogleSignIn in Frameworks */,
 				8A19F0F127AA100100A1B2C3 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -95,6 +101,9 @@
 			);
 			name = macgit;
 			packageProductDependencies = (
+				8AFB000327B0000100A1B2C3 /* FirebaseAuth */,
+				8AFB000427B0000100A1B2C3 /* FirebaseFirestore */,
+				8AFB000527B0000100A1B2C3 /* GoogleSignIn */,
 				8A19F0F027AA100100A1B2C3 /* Sparkle */,
 			);
 			productName = macgit;
@@ -156,6 +165,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			packageReferences = (
+				8AFB000127B0000100A1B2C3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				8AFB000227B0000100A1B2C3 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				8A19F0EF27AA100100A1B2C3 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			targets = (
@@ -201,6 +212,22 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		8AFB000127B0000100A1B2C3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.15.0;
+			};
+		};
+		8AFB000227B0000100A1B2C3 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.2.0;
+			};
+		};
 		8A19F0EF27AA100100A1B2C3 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/sparkle-project/Sparkle";
@@ -212,6 +239,21 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		8AFB000327B0000100A1B2C3 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8AFB000127B0000100A1B2C3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		8AFB000427B0000100A1B2C3 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8AFB000127B0000100A1B2C3 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		8AFB000527B0000100A1B2C3 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8AFB000227B0000100A1B2C3 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
 		8A19F0F027AA100100A1B2C3 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 8A19F0EF27AA100100A1B2C3 /* XCRemoteSwiftPackageReference "Sparkle" */;
@@ -363,7 +405,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				OTHER_LDFLAGS = "$(inherited) -framework AVFoundation";
+				OTHER_LDFLAGS = "$(inherited) -framework AVFoundation -ObjC";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.thanhtran.macgit;
 				PRODUCT_MODULE_NAME = macgit;
@@ -402,7 +444,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				OTHER_LDFLAGS = "$(inherited) -framework AVFoundation";
+				OTHER_LDFLAGS = "$(inherited) -framework AVFoundation -ObjC";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.thanhtran.macgit;
 				PRODUCT_MODULE_NAME = macgit;
