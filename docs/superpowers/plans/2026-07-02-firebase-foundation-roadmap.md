@@ -16,7 +16,7 @@
 
 ## Plan Index
 
-- Phase 0: [pending] [2026-07-02-firebase-foundation-phase-0-bootstrap.md](2026-07-02-firebase-foundation-phase-0-bootstrap.md) (branch: `codex/firebase-foundation-phase-0`)
+- Phase 0: [in progress] [2026-07-02-firebase-foundation-phase-0-bootstrap.md](2026-07-02-firebase-foundation-phase-0-bootstrap.md) (worktree: `.worktrees/firebase-foundation-phase-0`, branch: `codex/firebase-foundation-phase-0`)
 - Phase 1: [pending] [2026-07-02-firebase-foundation-phase-1-account-auth-ui.md](2026-07-02-firebase-foundation-phase-1-account-auth-ui.md) (branch: `codex/firebase-foundation-phase-1`)
 - Phase 2: [pending] [2026-07-02-firebase-foundation-phase-2-entitlement-lifecycle.md](2026-07-02-firebase-foundation-phase-2-entitlement-lifecycle.md) (branch: `codex/firebase-foundation-phase-2`)
 - Phase 3: [pending] [2026-07-02-firebase-foundation-phase-3-settings-sync.md](2026-07-02-firebase-foundation-phase-3-settings-sync.md) (branch: `codex/firebase-foundation-phase-3`)
@@ -43,4 +43,3 @@
 - GitHub, GitLab, or Bitbucket account integration.
 - Repository-history sync.
 - Sign in with Apple implementation.
-
